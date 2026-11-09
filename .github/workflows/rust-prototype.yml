@@ -24,24 +24,29 @@ jobs:
         run: cargo test --release --bin print-tray-rust --features agent-icon
       - name: Kiểm thử Settings có icon bánh răng
         run: cargo test --release --bin print-settings-rust --features settings-icon
-      - name: Kiểm tra cú pháp PowerShell 5.1 với UTF-8 BOM
+      - name: Kiem tra cu phap 2 script tren Windows PowerShell 5.1
         shell: powershell
         run: |
-          $path=Join-Path (Get-Location) 'scripts/export-excel-pdf.ps1'
-          $raw=[IO.File]::ReadAllBytes($path)
-          $utf8=New-Object System.Text.UTF8Encoding($true)
-          $encoded=$utf8.GetPreamble()+$raw
-          $file=Join-Path $env:RUNNER_TEMP 'export-excel-pdf-utf8bom.ps1'
-          [IO.File]::WriteAllBytes($file,$encoded)
-          $tokens=$null; $errors=$null
-          [System.Management.Automation.Language.Parser]::ParseFile($file,[ref]$tokens,[ref]$errors) | Out-Null
-          if($errors.Count -ne 0){$errors | ForEach-Object {Write-Error $_.ToString()}; throw 'PowerShell parser lỗi'}
-          Write-Host 'UTF-8 BOM và cú pháp PowerShell 5.1 OK'
-          $installer=Join-Path (Get-Location) 'scripts/install-rust-update.ps1'
-          $t=$null; $e=$null
-          [System.Management.Automation.Language.Parser]::ParseFile($installer,[ref]$t,[ref]$e) | Out-Null
-          if($e.Count -ne 0){$e | ForEach-Object {Write-Error $_.ToString()}; throw 'Updater PowerShell parse error'}
-          Write-Host 'Rust updater PowerShell parser OK'
+          $scripts=@('scripts/export-excel-pdf.ps1','scripts/install-rust-update.ps1')
+          foreach($relative in $scripts) {
+            $source=Join-Path (Get-Location) $relative
+            $raw=[System.IO.File]::ReadAllBytes($source)
+            $copy=Join-Path $env:RUNNER_TEMP ([System.IO.Path]::GetFileName($relative))
+            $bom=[byte[]]@(239,187,191)
+            $hasBom=($raw.Length -ge 3 -and $raw[0] -eq 239 -and $raw[1] -eq 187 -and $raw[2] -eq 191)
+            if($hasBom) {
+              [System.IO.File]::WriteAllBytes($copy,$raw)
+            } else {
+              [System.IO.File]::WriteAllBytes($copy,([byte[]]($bom+$raw)))
+            }
+            $tokens=$null; $errors=$null
+            [System.Management.Automation.Language.Parser]::ParseFile($copy,[ref]$tokens,[ref]$errors) | Out-Null
+            if($errors.Count -ne 0) {
+              $errors | ForEach-Object {Write-Error $_.ToString()}
+              throw "PowerShell 5.1 parse failed: $relative"
+            }
+            Write-Host ("PowerShell 5.1 UTF-8 BOM parser OK: "+$relative)
+          }
       - name: Kiểm tra kết nối tiến trình cập nhật với giao diện Settings
         shell: pwsh
         run: |
