@@ -54,6 +54,46 @@ fn startup_checked() -> bool {
         .output().map(|o|o.status.success()).unwrap_or(false)
 }
 
+
+#[cfg(windows)]
+fn test_connection(url_input:&str, token_input:&str) -> Result<String,String> {
+    use std::time::Duration;
+    let url=url_input.trim().trim_end_matches('/');
+    let token=token_input.trim();
+    if url.is_empty(){return Err("Chưa nhập URL Machine-Control.".into())}
+    if token.is_empty(){return Err("Chưa nhập Agent Token.".into())}
+    let parsed=ureq::Url::parse(url).map_err(|_|"URL không hợp lệ.".to_string())?;
+    let is_local=matches!(parsed.host_str(),Some("localhost"|"127.0.0.1"));
+    if parsed.scheme()!="https" && !(is_local && parsed.scheme()=="http") {
+        return Err("Chỉ chấp nhận HTTPS; HTTP chỉ được dùng với localhost.".into())
+    }
+    if parsed.host_str().is_none()||parsed.username()!=""||parsed.password().is_some()
+       ||parsed.query().is_some()||parsed.fragment().is_some() {
+        return Err("URL phải là địa chỉ API gốc, không kèm tài khoản, query hay fragment.".into())
+    }
+    let agent_id=std::fs::read_to_string(production::Config::base_dir().join("agent-id.txt"))
+       .ok().and_then(|v|uuid::Uuid::parse_str(v.trim()).ok())
+       .unwrap_or_else(uuid::Uuid::new_v4).to_string();
+    // GET chỉ đọc cấu hình chờ xử lý; không lấy job, không báo kết quả, không in.
+    let target=format!("{url}/api/print-agent/config/command");
+    let client=ureq::AgentBuilder::new().timeout(Duration::from_secs(10)).build();
+    let result=client.get(&target)
+       .set("Authorization",&format!("Bearer {token}"))
+       .set("X-Print-Agent-Id",&agent_id)
+       .set("Accept","application/json")
+       .call();
+    match result {
+        Ok(resp) if (200..300).contains(&resp.status()) => Ok(format!(
+            "Kết nối thành công! HTTP {}. URL và Token đã được máy chủ chấp nhận. Không gửi lệnh in.", resp.status())),
+        Ok(resp) => Err(format!("Máy chủ trả HTTP {}. Chưa xác minh được Token.",resp.status())),
+        Err(ureq::Error::Status(401,_)) => Err("HTTP 401: Agent Token không đúng, hết hiệu lực hoặc không được chấp nhận.".into()),
+        Err(ureq::Error::Status(403,_)) => Err("HTTP 403: Token hoặc Agent ID không có quyền truy cập API.".into()),
+        Err(ureq::Error::Status(404,_)) => Err("HTTP 404: URL kết nối được nhưng không tìm thấy API Print Agent. Kiểm tra URL gốc.".into()),
+        Err(ureq::Error::Status(code,_)) => Err(format!("Máy chủ trả HTTP {code}. Không thể xác nhận kết nối. ")),
+        Err(ureq::Error::Transport(e)) => Err(format!("Lỗi mạng, DNS, HTTPS hoặc timeout: {e}")),
+    }
+}
+
 #[cfg(windows)]
 fn main() {
     use native_windows_gui as nwg;
@@ -107,7 +147,8 @@ fn main() {
       .parent(&window).position((350,288)).size((380,100)).build(&mut mode).unwrap();
 
     let mut browse_xlsx=nwg::Button::default();let mut browse_folder=nwg::Button::default();let mut browse_exe=nwg::Button::default();
-    let mut refresh=nwg::Button::default();
+    let mut refresh=nwg::Button::default();let mut test=nwg::Button::default();
+    nwg::Button::builder().text("Test URL + Token").parent(&window).position((741,58)).size((108,28)).build(&mut test).unwrap();
     nwg::Button::builder().text("Làm mới / 更新").parent(&window).position((741,104)).size((108,28)).build(&mut refresh).unwrap();
     nwg::Button::builder().text("Chọn file...").parent(&window).position((741,196)).size((108,28)).build(&mut browse_xlsx).unwrap();
     nwg::Button::builder().text("Chọn thư mục...").parent(&window).position((741,334)).size((108,28)).build(&mut browse_folder).unwrap();
@@ -133,13 +174,20 @@ fn main() {
     let inputs=Rc::new(inputs);
     let p=Rc::new(printer);let m=Rc::new(mode);
     let a=Rc::new(auto);let b=Rc::new(boot);
-    let handles=(save.handle,close.handle,refresh.handle,browse_xlsx.handle,browse_folder.handle,browse_exe.handle);
+    let handles=(save.handle,close.handle,refresh.handle,browse_xlsx.handle,browse_folder.handle,browse_exe.handle,test.handle);
     let win=window.handle;
     let callback=nwg::full_bind_event_handler(&win,move|ev,_data,h|{
         if ev==nwg::Event::OnWindowClose&&h==win {nwg::stop_thread_dispatch();return}
         if ev!=nwg::Event::OnButtonClick {return}
         if h==handles.1 {nwg::stop_thread_dispatch();return}
-        if h==handles.2 {
+        if h==handles.6 {
+            // Dùng nội dung đang nhập; không yêu cầu lưu token xuống ổ đĩa.
+            let result=test_connection(&inputs[0].text(), &inputs[1].text());
+            match result {
+                Ok(msg)=>{nwg::simple_message("Kết nối Cloudflare thành công / 接続成功",&msg);}
+                Err(msg)=>{nwg::error_message("Kiểm tra URL / Token thất bại",&msg);}
+            }
+        } else if h==handles.2 {
             // Đóng/mở lại GUI để tạo lại danh sách đã lấy từ Windows Spooler.
             if let Ok(exe)=std::env::current_exe(){
                 let _=std::process::Command::new(exe).spawn();
