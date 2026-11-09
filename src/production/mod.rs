@@ -43,7 +43,12 @@ impl Config {
   if content.contains('\r'){return Err("Dữ liệu có ký tự xuống dòng không hợp lệ".into())}
   let tmp=path.with_extension("ini.tmp");fs::write(&tmp,content).map_err(|e|e.to_string())?;
   if path.exists(){let bak=path.with_extension("ini.bak");fs::copy(path,bak).map_err(|e|e.to_string())?;}
-  fs::rename(&tmp,path).map_err(|e|e.to_string())
+  // Windows không cho rename ghi đè file có sẵn: thực hiện thay thế bằng backup, rollback khi lỗi.
+  if path.exists(){fs::remove_file(path).map_err(|e|format!("Không thể thay config.ini: {e}"))?;}
+  match fs::rename(&tmp,path){Ok(())=>Ok(()),Err(e)=>{
+   let backup=path.with_extension("ini.bak");if !path.exists()&&backup.exists(){let _=fs::copy(backup,path);}
+   Err(format!("Không thay được config.ini: {e}"))
+  }}
  }
  pub fn base_dir()->PathBuf{std::env::current_exe().ok().and_then(|p|p.parent().map(Path::to_path_buf)).unwrap_or_else(||PathBuf::from("."))}
  pub fn path(&self,s:&str)->PathBuf{let p=PathBuf::from(s);if p.is_absolute(){p}else{Self::base_dir().join(p)}}
