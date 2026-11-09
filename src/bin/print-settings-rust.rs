@@ -3,35 +3,92 @@
 
 #[cfg(windows)]
 fn installed_printers() -> Vec<String> {
-    use std::process::Command;
-    let script = "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); Add-Type -AssemblyName System.Drawing; [System.Drawing.Printing.PrinterSettings]::InstalledPrinters | ForEach-Object { [Console]::WriteLine($_) }";
-    let output = Command::new("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-Command", script]).output();
-    match output {
-        Ok(o) if o.status.success() => {
-            let mut v: Vec<String> = String::from_utf8_lossy(&o.stdout).lines()
-                .map(|s|s.trim().to_string()).filter(|s|!s.is_empty()).collect();
-            v.sort(); v.dedup(); v
-        }
-        _ => Vec::new(),
+    // Gọi trực tiếp Windows Spooler, tránh khởi chạy PowerShell và tải .NET mỗi lần mở.
+    use std::{ffi::c_void,ptr};
+    #[repr(C)]
+    struct PrinterInfo4 { name:*const u16, server:*const u16, attributes:u32 }
+    #[link(name="winspool")]
+    unsafe extern "system" {
+        fn EnumPrintersW(flags:u32,name:*const u16,level:u32,buffer:*mut u8,size:u32,needed:*mut u32,returned:*mut u32)->i32;
+    }
+    fn wide(ptr:*const u16)->String {
+        if ptr.is_null(){return String::new()}
+        unsafe {let mut n=0;while n<32768 && *ptr.add(n)!=0{n+=1}
+            String::from_utf16_lossy(std::slice::from_raw_parts(ptr,n))}
+    }
+    unsafe {
+        let mut size=0u32;let mut count=0u32;
+        let _=EnumPrintersW(0x2|0x4,ptr::null(),4,ptr::null_mut(),0,&mut size,&mut count);
+        if size==0||size>16*1024*1024{return Vec::new()}
+        // Cấp phát vùng đệm theo alignment của cấu trúc, tránh UB trên Windows x64.
+        let words=(size as usize).div_ceil(std::mem::size_of::<usize>());
+        let mut buffer=vec![0usize;words];
+        if EnumPrintersW(0x2|0x4,ptr::null(),4,buffer.as_mut_ptr() as *mut u8,(words*std::mem::size_of::<usize>()) as u32,&mut size,&mut count)==0{return Vec::new()}
+        let ptr=buffer.as_ptr() as *const PrinterInfo4;
+        let mut names=Vec::new();
+        for i in 0..(count as usize).min(4096){let v=wide((*ptr.add(i)).name);if !v.is_empty(){names.push(v)}}
+        names.sort();names.dedup();names
     }
 }
 
 #[cfg(windows)]
 fn pick_file(kind: &str) -> Option<String> {
-    use std::process::Command;
-    let code = match kind {
-        "xlsx" => "Add-Type -AssemblyName System.Windows.Forms; $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='Excel (*.xlsx)|*.xlsx'; if($d.ShowDialog() -eq 'OK'){[Console]::Write($d.FileName)}",
-        "exe" => "Add-Type -AssemblyName System.Windows.Forms; $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='Executable (*.exe)|*.exe'; if($d.ShowDialog() -eq 'OK'){[Console]::Write($d.FileName)}",
-        _ => "Add-Type -AssemblyName System.Windows.Forms; $d=New-Object System.Windows.Forms.FolderBrowserDialog; if($d.ShowDialog() -eq 'OK'){[Console]::Write($d.SelectedPath)}",
-    };
-    let script = format!("[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); {code}");
-    let result = Command::new("powershell.exe").args(["-NoProfile","-STA","-Command",&script]).output().ok()?;
-    if result.status.success() {
-        let path=String::from_utf8_lossy(&result.stdout).trim().to_string();
-        if !path.is_empty() {return Some(path)}
+    // Native Win32 common dialogs: không spawn PowerShell, không tải Forms/.NET.
+    use std::{ffi::c_void,mem,ptr};
+    #[repr(C)]
+    struct OpenFileName {
+        size:u32,owner:*mut c_void,instance:*mut c_void,filter:*const u16,custom_filter:*mut u16,
+        max_custom_filter:u32,filter_index:u32,file:*mut u16,max_file:u32,file_title:*mut u16,
+        max_file_title:u32,initial_dir:*const u16,title:*const u16,flags:u32,file_offset:u16,
+        file_extension:u16,def_ext:*const u16,cust_data:isize,hook:*mut c_void,template_name:*const u16,
+        reserved:*mut c_void,reserved_dword:u32,flags_ex:u32
     }
-    None
+    #[repr(C)]
+    struct BrowseInfo { owner:*mut c_void,root:*mut c_void,display_name:*mut u16,title:*const u16,
+        flags:u32,callback:*mut c_void,lparam:isize,image:i32 }
+    #[link(name="comdlg32")]
+    unsafe extern "system" {fn GetOpenFileNameW(info:*mut OpenFileName)->i32;}
+    #[link(name="shell32")]
+    unsafe extern "system" {
+        fn SHBrowseForFolderW(info:*const BrowseInfo)->*mut c_void;
+        fn SHGetPathFromIDListW(id:*const c_void,path:*mut u16)->i32;
+    }
+    #[link(name="ole32")]
+    unsafe extern "system" {fn CoTaskMemFree(ptr:*mut c_void);}
+    fn wide(s:&str)->Vec<u16>{s.encode_utf16().chain(std::iter::once(0)).collect()}
+    if kind=="folder" {
+        let title=wide("Chọn thư mục lưu PDF / PDF保存先");
+        let dialog=BrowseInfo{owner:ptr::null_mut(),root:ptr::null_mut(),display_name:ptr::null_mut(),
+            title:title.as_ptr(),flags:0x00000040|0x00000001,callback:ptr::null_mut(),lparam:0,image:0};
+        unsafe {
+            let id=SHBrowseForFolderW(&dialog);
+            if id.is_null(){return None}
+            let mut path=vec![0u16;32768];
+            let ok=SHGetPathFromIDListW(id,path.as_mut_ptr())!=0;
+            CoTaskMemFree(id);
+            if !ok{return None}
+            let len=path.iter().position(|v|*v==0).unwrap_or(0);
+            let value=String::from_utf16_lossy(&path[..len]);
+            return if value.is_empty(){None}else{Some(value)}
+        }
+    }
+    let filter=if kind=="xlsx"{
+        // Hai chuỗi null liên tiếp theo chuẩn Windows.
+        wide("Excel Workbook (*.xlsx)\0*.xlsx\0All Files (*.*)\0*.*\0")
+    }else{wide("Executable (*.exe)\0*.exe\0All Files (*.*)\0*.*\0")};
+    let mut file=vec![0u16;32768];
+    let mut info=OpenFileName{size:mem::size_of::<OpenFileName>() as u32,owner:ptr::null_mut(),instance:ptr::null_mut(),
+        filter:filter.as_ptr(),custom_filter:ptr::null_mut(),max_custom_filter:0,filter_index:1,
+        file:file.as_mut_ptr(),max_file:file.len() as u32,file_title:ptr::null_mut(),max_file_title:0,
+        initial_dir:ptr::null(),title:ptr::null(),flags:0x00080000|0x00001000|0x00000800,
+        file_offset:0,file_extension:0,def_ext:ptr::null(),cust_data:0,hook:ptr::null_mut(),
+        template_name:ptr::null(),reserved:ptr::null_mut(),reserved_dword:0,flags_ex:0};
+    unsafe {
+        if GetOpenFileNameW(&mut info)==0{return None}
+    }
+    let len=file.iter().position(|v|*v==0).unwrap_or(0);
+    let path=String::from_utf16_lossy(&file[..len]);
+    if path.is_empty(){None}else{Some(path)}
 }
 
 #[cfg(windows)]
