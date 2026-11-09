@@ -169,7 +169,8 @@ pub fn run(live:bool)->Result<(),String>{
  let id=agent_id()?;
  if !live {log("Rust Agent chạy CHẾ ĐỘ AN TOÀN; dùng --enable-live để thực sự nhận lệnh từ Cloudflare");return Ok(())}
  // Mặc định khi chạy live sẽ in thật nếu nhận job. Chỉ bật trên PC kiểm thử.
- let api=Api::new(&c,id)?;
+ let api=Api::new(&c,id.clone())?;
+ let wake=super::socket::start(&c,id);
  log("Kết nối Machine-Control Rust --enable-live");
  api.snapshot(&c);
  let mut last_heartbeat=Instant::now()-Duration::from_secs(61);
@@ -182,6 +183,6 @@ pub fn run(live:bool)->Result<(),String>{
   if last_config.elapsed()>=Duration::from_secs(15){api.config_command(&mut c);last_config=Instant::now()}
   if last_pdf.elapsed()>=Duration::from_secs(15){api.sumatra_command();last_pdf=Instant::now()}
   if last_update.elapsed()>=Duration::from_secs(30){api.update_command();last_update=Instant::now()}
-  thread::sleep(Duration::from_secs(c.poll_seconds));
+  let _=wake.recv_timeout(Duration::from_secs(c.poll_seconds));
  }
 }
