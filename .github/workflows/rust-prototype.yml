@@ -22,6 +22,19 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Kiểm thử đúng hai ứng dụng
         run: cargo test --release --bin print-tray-rust --bin print-settings-rust
+      - name: Kiểm tra cú pháp PowerShell 5.1 với UTF-8 BOM
+        shell: powershell
+        run: |
+          $path=Join-Path (Get-Location) 'scripts/export-excel-pdf.ps1'
+          $raw=[IO.File]::ReadAllBytes($path)
+          $utf8=New-Object System.Text.UTF8Encoding($true)
+          $encoded=$utf8.GetPreamble()+$raw
+          $file=Join-Path $env:RUNNER_TEMP 'export-excel-pdf-utf8bom.ps1'
+          [IO.File]::WriteAllBytes($file,$encoded)
+          $tokens=$null; $errors=$null
+          [System.Management.Automation.Language.Parser]::ParseFile($file,[ref]$tokens,[ref]$errors) | Out-Null
+          if($errors.Count -ne 0){$errors | ForEach-Object {Write-Error $_.ToString()}; throw 'PowerShell parser lỗi'}
+          Write-Host 'UTF-8 BOM và cú pháp PowerShell 5.1 OK'
       - name: Build đúng hai EXE
         run: cargo build --release --bin print-tray-rust --bin print-settings-rust
       - name: Đóng gói hai EXE, không kèm binary phụ
