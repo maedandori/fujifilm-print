@@ -1,0 +1,58 @@
+name: Rust Print Agent (thử nghiệm)
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    name: Kiểm thử và build Rust trên Windows
+    runs-on: windows-2022
+    steps:
+      - name: Lấy mã nguồn
+        uses: actions/checkout@v4
+      - name: Cài Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Kiểm thử
+        run: cargo test --release
+      - name: Build EXE tối ưu dung lượng
+        run: cargo build --release
+      - name: Chạy mô phỏng không in
+        shell: pwsh
+        run: |
+          & ./target/release/fujifilm-print-rust.exe --simulate sample-job.json
+          if ($LASTEXITCODE -ne 0) { throw 'Mô phỏng thất bại' }
+      - name: Đo hiệu năng Rust và RAM khi chạy chờ
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path benchmark-output | Out-Null
+          $exe = (Resolve-Path ./target/release/fujifilm-print-rust.exe).Path
+          $size = (Get-Item $exe).Length
+          $bench = & $exe --benchmark 100000
+          if ($LASTEXITCODE -ne 0) { throw 'Benchmark thất bại' }
+          $proc = Start-Process -FilePath $exe -ArgumentList '--idle-seconds','15' -PassThru -WindowStyle Hidden
+          Start-Sleep -Seconds 2
+          $p = Get-Process -Id $proc.Id -ErrorAction Stop
+          $memory = $p.WorkingSet64
+          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          @(
+            'Chỉ là số đo Rust trên GitHub Actions; KHÔNG phải so sánh C# trực tiếp.'
+            ('EXE_bytes=' + $size)
+            ('Idle_WorkingSet_bytes=' + $memory)
+            ('Benchmark=' + ($bench -join ' '))
+          ) | Set-Content -Encoding utf8 benchmark-output/results.txt
+          Get-Content benchmark-output/results.txt
+      - name: Đóng gói EXE thử nghiệm
+        shell: pwsh
+        run: |
+          Copy-Item target/release/fujifilm-print-rust.exe benchmark-output/Fujifilm-Print-Rust-Test.exe
+          Copy-Item sample-job.json benchmark-output/sample-job.json
+          Copy-Item README.md benchmark-output/README.md
+      - name: Lưu artifact để tải bằng iPhone hoặc PC
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rust-Print-Agent-Windows-x64
+          path: benchmark-output/
+          retention-days: 30
