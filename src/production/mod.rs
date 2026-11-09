@@ -1,3 +1,4 @@
+pub mod socket;
 pub mod engine;
 use serde::{Deserialize,Serialize};
 use std::{collections::BTreeMap,fs,path::{Path,PathBuf}};
