@@ -47,7 +47,8 @@ jobs:
       - name: Đóng gói EXE thử nghiệm
         shell: pwsh
         run: |
-          Copy-Item target/release/fujifilm-print-rust.exe benchmark-output/Fujifilm-Print-Rust-Test.exe
+          Copy-Item target/release/fujifilm-print-gui.exe benchmark-output/Fujifilm-Print-Rust-Test.exe
+          Copy-Item target/release/fujifilm-print-rust.exe benchmark-output/Fujifilm-Print-Rust-CLI.exe
           Copy-Item sample-job.json benchmark-output/sample-job.json
           Copy-Item README.md benchmark-output/README.md
       - name: Lưu artifact để tải bằng iPhone hoặc PC
