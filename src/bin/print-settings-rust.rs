@@ -169,6 +169,19 @@ fn test_connection(url_input:&str, token_input:&str) -> Result<String,String> {
 }
 
 #[cfg(windows)]
+fn read_update_progress() -> Option<(u32,String)> {
+    let p=production::Config::base_dir().join("rust-update-progress.json");
+    let bytes=std::fs::read(p).ok()?;
+    let v:serde_json::Value=serde_json::from_slice(&bytes).ok()?;
+    let percent=v["percent"].as_u64()?.min(100) as u32;
+    let stage=v["stage"].as_str().unwrap_or("");
+    let msg=v["message"].as_str().unwrap_or("Đang kiểm tra cập nhật");
+    // 100% only when download or installation really reached that point.
+    let status=if stage=="error"{"Lỗi cập nhật"}else{msg};
+    Some((percent,format!("{status} — {percent}%")))
+}
+
+#[cfg(windows)]
 fn main() {
     use native_windows_gui as nwg;
     use production::Config;
@@ -182,7 +195,7 @@ fn main() {
     let gear_icon=embedded.icon(1,Some((32,32))).unwrap_or_else(||nwg::Icon::from_system(nwg::OemIcon::Information));
     let mut window=nwg::Window::default();
     nwg::Window::builder().title(&format!("Fujifilm Print Settings Rust v{app_version} / 印刷設定")).icon(Some(&gear_icon))
-        .size((870,745)).position((150,60)).build(&mut window).unwrap();
+        .size((870,785)).position((150,60)).build(&mut window).unwrap();
     let c=Config::load(&Config::base_dir().join("config.ini")).unwrap_or_default();
 
     let fields=[
@@ -243,10 +256,25 @@ fn main() {
 
     let mut note=nwg::Label::default();
     nwg::Label::builder().text(&format!("Phiên bản Settings: v{app_version} | Lưu config.ini | Excel 2013 cần thiết để xuất PDF."))
-        .parent(&window).position((20,579)).size((820,28)).build(&mut note).unwrap();
+        .parent(&window).position((20,563)).size((820,28)).build(&mut note).unwrap();
+
+    // Settings hiển thị thông tin updater thực tế, không mô phỏng phần trăm chạy.
+    let mut update_label=nwg::Label::default();
+    nwg::Label::builder().text("Cập nhật Rust / 更新状況: Chưa có hoạt động cập nhật")
+        .parent(&window).position((20,598)).size((820,26)).build(&mut update_label).unwrap();
+    let mut update_bar=nwg::ProgressBar::default();
+    nwg::ProgressBar::builder().range(0..100).pos(0)
+        .parent(&window).position((20,630)).size((820,22)).build(&mut update_bar).unwrap();
+    if let Some((percent,status))=read_update_progress(){
+        update_bar.set_pos(percent);
+        update_label.set_text(&format!("Cập nhật Rust / 更新状況: {status}"));
+    }
+    let mut update_timer=nwg::Timer::default();
+    nwg::Timer::builder().parent(&window).interval(750).stopped(false).build(&mut update_timer).unwrap();
+    let update_timer_handle=update_timer.handle;
     let mut save=nwg::Button::default();let mut close=nwg::Button::default();
-    nwg::Button::builder().text("Lưu cấu hình / 設定を保存").parent(&window).position((465,633)).size((205,42)).build(&mut save).unwrap();
-    nwg::Button::builder().text("Đóng / 閉じる").parent(&window).position((692,633)).size((150,42)).build(&mut close).unwrap();
+    nwg::Button::builder().text("Lưu cấu hình / 設定を保存").parent(&window).position((465,690)).size((205,42)).build(&mut save).unwrap();
+    nwg::Button::builder().text("Đóng / 閉じる").parent(&window).position((692,690)).size((150,42)).build(&mut close).unwrap();
 
     // Spooler có thể chặn rất lâu nếu có máy in mạng offline.
     // Tuyệt đối không gọi EnumPrintersW trên luồng giao diện.
@@ -263,9 +291,19 @@ fn main() {
     let inputs=Rc::new(inputs);
     let p=Rc::new(printer);let m=Rc::new(mode);
     let a=Rc::new(auto);let b=Rc::new(boot);
+    let update_label=Rc::new(update_label);
+    let update_bar=Rc::new(update_bar);
     let handles=(save.handle,close.handle,refresh.handle,browse_xlsx.handle,browse_folder.handle,browse_exe.handle,test.handle);
     let win=window.handle;
     let callback=nwg::full_bind_event_handler(&win,move|ev,_data,h|{
+        if ev==nwg::Event::OnTimerTick && h==update_timer_handle {
+            if let Some((percent,status))=read_update_progress(){
+                if update_bar.pos()!=percent{update_bar.set_pos(percent);}
+                let value=format!("Cập nhật Rust / 更新状況: {status}");
+                if update_label.text()!=value{update_label.set_text(&value);}
+            }
+            return;
+        }
         if ev==nwg::Event::OnNotice && h==notice_handle {
             if let Ok(found)=printer_rx.try_recv(){
                 let selected=p.selection_string().unwrap_or_default();
