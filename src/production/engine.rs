@@ -3,6 +3,15 @@ use std::{fs,io::Read,path::{Path,PathBuf},process::{Command,Stdio},thread,time:
 use serde_json::{json,Value};
 use sha2::{Digest,Sha256};
 
+// Không mở cửa sổ console cho chương trình con của Print Agent.
+#[cfg(windows)]
+fn hide_child_window(cmd:&mut Command){
+ use std::os::windows::process::CommandExt;
+ cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+}
+#[cfg(not(windows))]
+fn hide_child_window(_cmd:&mut Command){}
+
 pub fn pdf_output(c:&Config,j:&Job)->Result<(),String>{
  j.check()?;let template=c.path(&c.template_path);
  if !template.is_file()||template.extension().and_then(|x|x.to_str()).map_or(true,|x|!x.eq_ignore_ascii_case("xlsx")){return Err(format!("Không tìm thấy file XLSX: {}",template.display()))}
@@ -36,9 +45,14 @@ pub fn pdf_output(c:&Config,j:&Job)->Result<(),String>{
    let bytes=serde_json::to_vec(&part).map_err(|e|e.to_string())?;
    fs::write(&temp,bytes).map_err(|e|e.to_string())?;
    let pdf=folder.join("template.pdf");
-   let result=Command::new("powershell.exe").args(["-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-File"])
+   // CREATE_NO_WINDOW giữ PowerShell hoàn toàn ẩn khi Agent chạy bằng EXE GUI.
+   // -WindowStyle Hidden chỉ là lớp bảo vệ bổ sung cho Windows PowerShell 5.1.
+   let mut ps=Command::new("powershell.exe");
+   ps.args(["-NoProfile","-NonInteractive","-WindowStyle","Hidden","-ExecutionPolicy","Bypass","-File"])
     .arg(&script).arg("-JobFile").arg(&temp).arg("-Template").arg(&template).arg("-Output").arg(&pdf)
-    .stdout(Stdio::piped()).stderr(Stdio::piped()).output();
+    .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+   hide_child_window(&mut ps);
+   let result=ps.output();
    let _=fs::remove_file(&temp);
    let result=result.map_err(|e|format!("Không khởi động Excel PowerShell: {e}"))?;
    if !result.status.success(){return Err(format!("Xuất PDF thất bại: {}",String::from_utf8_lossy(&result.stderr)))}
@@ -47,8 +61,10 @@ pub fn pdf_output(c:&Config,j:&Job)->Result<(),String>{
    if let Some(ref exe)=printer{
     let mut cmd=Command::new(exe);
     if c.printer_name.trim().is_empty(){cmd.arg("-print-to-default");}else{cmd.args(["-print-to",&c.printer_name]);}
-    let status=cmd.args(["-print-settings","noscale,simplex","-silent"]).arg(&pdf)
-     .spawn().map_err(|e|format!("Không mở được SumatraPDF: {e}"))?
+    cmd.args(["-print-settings","noscale,simplex","-silent"]).arg(&pdf)
+       .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    hide_child_window(&mut cmd);
+    let status=cmd.spawn().map_err(|e|format!("Không mở được SumatraPDF: {e}"))?
      .wait().map_err(|e|format!("SumatraPDF lỗi: {e}"))?;
     if !status.success(){return Err(format!("SumatraPDF trả mã {:?}; không thử lại để tránh in trùng",status.code()))}
    }
