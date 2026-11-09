@@ -44,7 +44,9 @@ pub fn pdf_output(c:&Config,j:&Job)->Result<(),String>{
    let temp=std::env::temp_dir().join(format!("fujifilm-rust-{}.json",uuid::Uuid::new_v4()));
    let bytes=serde_json::to_vec(&part).map_err(|e|e.to_string())?;
    fs::write(&temp,bytes).map_err(|e|e.to_string())?;
-   let pdf=folder.join("template.pdf");
+   // Mỗi lần xuất dùng file riêng để không xóa/ghi đè PDF cũ còn mở bởi Adobe, Sumatra hoặc OneDrive.
+   // Không dùng jobId trực tiếp trong tên file nhằm tránh ký tự đường dẫn không an toàn.
+   let pdf=folder.join(format!("print-{}.pdf",uuid::Uuid::new_v4()));
    // CREATE_NO_WINDOW giữ PowerShell hoàn toàn ẩn khi Agent chạy bằng EXE GUI.
    // -WindowStyle Hidden chỉ là lớp bảo vệ bổ sung cho Windows PowerShell 5.1.
    let mut ps=Command::new("powershell.exe");
