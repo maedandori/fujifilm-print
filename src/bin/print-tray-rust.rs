@@ -29,12 +29,12 @@ fn main() {
  let handles=(tray.handle,start.handle,stop.handle,settings.handle,log.handle,status.handle,exit.handle);
  let menu=Rc::new(menu);let m=Rc::clone(&menu);let win=window.handle;
  let callback=nwg::full_bind_event_handler(&win,move|ev,_data,h|{
-  if ev==nwg::Event::OnContextMenu && h==handles.0 {let (x,y)=nwg::GlobalCursor::position();m.popup(x,y);return}
+  if ev==(nwg::Event::OnContextMenu == ev || nwg::Event::OnMousePressRightUp == ev) && h==handles.0 {let (x,y)=nwg::GlobalCursor::position();m.popup(x,y);return}
   if ev!=nwg::Event::OnMenuItemSelected {return}
   if h==handles.1 {
    let mut guard=child.borrow_mut();
    if let Some(p)=guard.as_mut(){if p.try_wait().ok().flatten().is_none(){nwg::simple_message("Fujifilm Rust","Agent đang hoạt động");return}}
-   let exe=base.join("Print-Agent-Rust.exe");
+   let exe=base.join("Print-Agent-Rust-Core.exe");
    if !exe.exists(){nwg::error_message("Fujifilm Rust","Không tìm thấy Print-Agent-Rust.exe");return}
    let msg="CHÚ Ý: --enable-live sẽ nhận job thật từ Cloudflare và có thể IN GIẤY. Chỉ thử trên máy an toàn. Tiếp tục?";
    if nwg::message(&nwg::MessageParams{title:"Bật in thật?",content:msg,buttons:nwg::MessageButtons::YesNo,icons:nwg::MessageIcons::Warning})!=nwg::MessageChoice::Yes{return}
