@@ -37,11 +37,11 @@ fn main() {
    let exe=base.join("Print-Agent-Rust.exe");
    if !exe.exists(){nwg::error_message("Fujifilm Rust","Không tìm thấy Print-Agent-Rust.exe");return}
    let msg="CHÚ Ý: --enable-live sẽ nhận job thật từ Cloudflare và có thể IN GIẤY. Chỉ thử trên máy an toàn. Tiếp tục?";
-   if nwg::modal_yes_no_message(&window,"Bật in thật?",msg)!=nwg::MessageChoice::Yes{return}
+   if nwg::message(&nwg::MessageParams{title:"Bật in thật?",content:msg,buttons:nwg::MessageButtons::YesNo,icons:nwg::MessageIcons::Warning})!=nwg::MessageChoice::Yes{return}
    let _=std::fs::remove_file(base.join("rust-stop-request.flag"));
    match Command::new(exe).arg("--enable-live").creation_flags(0x08000000).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn(){
     Ok(proc)=>{*guard=Some(proc);nwg::simple_message("Fujifilm Rust","Đã bắt đầu nhận lệnh. Xem log để kiểm tra trạng thái.");}
-    Err(e)=>nwg::error_message("Lỗi khởi động Agent",&e.to_string())
+    Err(e)=>{nwg::error_message("Lỗi khởi động Agent",&e.to_string());}
    }
   }else if h==handles.2{
    let _=std::fs::write(base.join("rust-stop-request.flag"),"stop");
@@ -53,7 +53,7 @@ fn main() {
    if let Err(e)=Command::new("notepad.exe").arg(path).spawn(){nwg::error_message("Không mở được nhật ký",&e.to_string());}
   }else if h==handles.5 {
    let mut guard=child.borrow_mut();
-   let running=guard.as_mut().and_then(|c|c.try_wait().ok()).is_some_and(|status|!status.success());
+   let running=guard.as_mut().and_then(|c|c.try_wait().ok().flatten()).is_some_and(|status|!status.success());
    let text=if guard.as_mut().and_then(|c|c.try_wait().ok()).flatten().is_none() && guard.is_some(){"Agent Rust có tiến trình đang chạy"}else if running{"Agent Rust đã dừng với lỗi"}else{"Agent Rust chưa chạy / đã thoát"};
    nwg::simple_message("Trạng thái Fujifilm Rust",text);
   }else if h==handles.6 {
