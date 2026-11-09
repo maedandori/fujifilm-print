@@ -36,3 +36,30 @@ cargo run --release --bin fujifilm-print-rust -- --idle-seconds 30
 ## So sánh công bằng
 
 Nên đo C# và Rust trên **cùng Windows**, cùng điều kiện idle, cùng số lượng lệnh và cùng cách đóng gói. Số đo Rust trong CI không phải benchmark trực tiếp với C#.
+
+
+## Bản chuyển đổi C# → Rust (đang thử nghiệm)
+
+Bản Rust được chia thành các file:
+- **Print-Agent-Rust-Tray.exe**: System Tray, mở Settings, xem log, bật nhận lệnh có xác nhận, yêu cầu dừng sau khi xử lý xong job
+- **Print-Settings-Rust.exe**: sửa và lưu config.ini, đủ các trường tương thích C#
+- **Print-Agent-Rust.exe**: Agent dòng lệnh; mặc định KHÔNG nhận job; chỉ khi chạy với `--enable-live` mới thực sự kết nối và xử lý
+- **scripts/export-excel-pdf.ps1**: cần đặt trong thư mục `scripts` bên cạnh EXE; dùng Excel 2013 COM để xuất template.pdf
+
+Các chức năng đã có mã nguồn: đọc INI và agent-id.txt, JSON cards/cells và isFinal(完), chia tối đa MaxPdfPages, Excel 原紙 → template.pdf, SumatraPDF, WebSocket đánh thức + polling, HTTP Bearer, heartbeat Windows Spooler, cập nhật cấu hình INI từ web, yêu cầu tải SumatraPDF từ Worker có kiểm tra SHA-256, báo status job, log, System Tray, Settings.
+
+**Chưa tương đương C# hoàn toàn:** tự nâng cấp hai EXE Rust qua GitHub Releases/Worker (manifest production hiện dành cho C#, Rust chủ động không áp dụng), giao diện chọn file/máy in như WinForms cũ, tự bật theo Windows, UI đổi ngôn ngữ động, kiểm chứng trên Excel 2013/driver Fuji Xerox thật. Gói mới cũng chưa thay đổi bất kỳ Worker Cloudflare nào. Các phần này KHÔNG được coi là đã hoàn tất.
+
+### Hướng dẫn kiểm thử không in
+1. Tải artifact mới nhất ở Actions **chỉ khi build Success**. Giải nén **toàn bộ** ZIP vào thư mục riêng, không đè bản C#.
+2. Mở `Print-Settings-Rust.exe` để tạo `config.ini`. Nếu copy config từ C#, **đừng dùng chung Agent ID khi Agent C# đang chạy**.
+3. Chế độ xuất PDF nhưng không in: cấu hình `PrintMode=pdf`, template.xlsx và đường dẫn PDF phù hợp, mở PowerShell ở thư mục EXE và chạy `./Print-Agent-Rust.exe --test-pdf`.
+4. Để mở System Tray, chạy `Print-Agent-Rust-Tray.exe`. Việc bấm **Bắt đầu nhận lệnh (in thật)** sẽ có hộp xác nhận rõ ràng.
+5. Không chạy C# và Rust đồng thời cùng một `agent-id.txt`: có thể gây tranh chấp job hoặc in trùng.
+
+### An toàn / giới hạn
+- Không nên đưa token production vào máy thử không tin cậy.
+- Luôn giữ bản C# làm dự phòng. Chỉ chuyển máy công ty sau khi đối chiếu PDF, trang, dấu 完, giấy in thực, heartbeat và cập nhật.
+- `submitted` chỉ có nghĩa đã gửi tới spooler; không chứng minh in xong.
+- Nếu có lỗi ở PDF chunk thứ hai, **không tự thử lại** vì chunk đầu có thể đã in.
+- Script PowerShell xuất PDF cần Windows PowerShell 5.1 và Excel đã cài. Rust native không thể tự thay thế Excel 2013 COM nếu cần giữ chính xác bố cục XLSX.
