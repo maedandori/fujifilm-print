@@ -8,6 +8,7 @@ $ErrorActionPreference = 'Stop'
 $files = @('Print-Agent.exe','Print-Settings.exe')
 $backup = Join-Path $Stage 'backup'
 $success = $false
+$trayStopped = $false
 $reason = ''
 function UpdateLog([string]$message) {
  try { Add-Content -LiteralPath (Join-Path $Target 'rust-update.log') -Encoding UTF8 -Value ("{0} {1}" -f (Get-Date -Format s),$message) } catch {}
@@ -36,7 +37,7 @@ try {
  }
  if(-not $closed) {throw 'Print Settings still open; update deferred'}
  # Stop only the tray process. Do not stop unrelated C# apps.
- if($TrayPid -gt 0) {Stop-Process -Id $TrayPid -ErrorAction SilentlyContinue}
+ if($TrayPid -gt 0) {Stop-Process -Id $TrayPid -ErrorAction SilentlyContinue; $trayStopped=$true}
  if($UpdaterPid -gt 0) {
    try {Wait-Process -Id $UpdaterPid -Timeout 30 -ErrorAction SilentlyContinue} catch {}
  }
@@ -73,7 +74,7 @@ try {
  UpdateLog ("Automatic update deferred/failed, rollback attempted: $reason")
 } finally {
  # Never alter config.ini, agent-id.txt, xlsx, job state or PDF files.
- if($success -or $TrayPid -gt 0) {
+ if($success -or $trayStopped) {
    $agent=Join-Path $Target 'Print-Agent.exe'
    if(Test-Path -LiteralPath $agent) {
      try {Start-Process -FilePath $agent -WorkingDirectory $Target} catch {UpdateLog "Agent restart failed: $_"}
