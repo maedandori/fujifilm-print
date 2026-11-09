@@ -86,9 +86,12 @@ impl Api{
   let machine=std::env::var("COMPUTERNAME").unwrap_or_else(|_|"Windows".into());
   
   let body=json!({"agentId":self.id,"machineName":machine,"printerName":name,
-    "printerDisplayName":c.printer_display_name,"agentVersion":"0.3.0-rust",
+    "printerDisplayName":c.printer_display_name,"agentVersion":option_env!("FUJIFILM_BUILD_VERSION").unwrap_or("0.5.0"),
     "printerValid":valid,"paperStatus":paper,"windowsStatus":windows_status});
-  if let Err(e)=self.post("api/print-agent/status/heartbeat",body){log(&e)}
+  match self.post("api/print-agent/status/heartbeat",body){
+   Ok(())=>log(&format!("HEARTBEAT_OK agent={} printer={} valid={}",self.id,name,valid)),
+   Err(e)=>log(&format!("HEARTBEAT_FAILED: {e}")),
+  }
   let installed=Config::base_dir().join("SumatraPDF.exe").is_file();
   if let Err(e)=self.post("api/print-agent/pdf-tool/status",json!({"installed":installed})){log(&e)}
  }
@@ -182,8 +185,10 @@ pub fn run(live:bool)->Result<(),String>{
  log("Kết nối Machine-Control Rust --enable-live");
  let stop_file=Config::base_dir().join("rust-stop-request.flag");
  let _=fs::remove_file(&stop_file);
+ // Đăng ký máy in trước khi nhận job hoặc thực hiện kiểm tra phụ chậm.
+ api.heartbeat(&c);
  api.snapshot(&c);
- let mut last_heartbeat=Instant::now()-Duration::from_secs(61);
+ let mut last_heartbeat=Instant::now();
  let mut last_config=Instant::now()-Duration::from_secs(16);
  let mut last_pdf=Instant::now()-Duration::from_secs(16);
  let mut last_update=Instant::now()-Duration::from_secs(31);
