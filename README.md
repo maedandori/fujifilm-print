@@ -9,7 +9,7 @@
 Cần Rust stable trên Windows 10/11 x64:
 
 ```powershell
-cargo test --locked
+cargo test --release
 cargo run --release -- --benchmark 100000
 cargo run --release -- --simulate sample-job.json
 cargo run --release -- --idle-seconds 30
