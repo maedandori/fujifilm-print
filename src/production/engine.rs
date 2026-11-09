@@ -10,10 +10,21 @@ pub fn pdf_output(c:&Config,j:&Job)->Result<(),String>{
  fs::create_dir_all(&folder).map_err(|e|e.to_string())?;
  let mode=if c.print_mode=="printer"{"pdfprint"}else{&c.print_mode};
  let printer=if mode=="pdfprint"{Some(resolve_sumatra(c)?)}else{None};
+ // Windows PowerShell 5.1 doc UTF-8 không BOM dưới dạng ANSI: lỗi ký tự Tiếng Việt khiến parser ngắt chuỗi.
+ // Luôn tạo bản script chuẩn UTF-8 BOM từ mã nguồn đã nhúng, không dùng bản cũ từng được tạo lỗi.
  let script=Config::base_dir().join("scripts").join("export-excel-pdf.ps1");
- if !script.exists(){
-  if let Some(parent)=script.parent(){fs::create_dir_all(parent).map_err(|e|e.to_string())?;}
-  fs::write(&script,include_str!("../../scripts/export-excel-pdf.ps1")).map_err(|e|format!("Không tạo được script Excel: {e}"))?;
+ if let Some(parent)=script.parent(){fs::create_dir_all(parent).map_err(|e|e.to_string())?;}
+ let embedded=include_str!("../../scripts/export-excel-pdf.ps1").as_bytes();
+ let mut script_bytes=Vec::with_capacity(embedded.len()+3);
+ script_bytes.extend_from_slice(&[0xEF,0xBB,0xBF]);
+ script_bytes.extend_from_slice(embedded);
+ let replace=fs::read(&script).map_or(true,|existing|existing!=script_bytes);
+ if replace {
+  let tmp=script.with_extension("ps1.new");
+  fs::write(&tmp,&script_bytes).map_err(|e|format!("Không tạo script UTF-8 BOM: {e}"))?;
+  if script.exists(){fs::remove_file(&script).map_err(|e|format!("Không thay được script Excel lỗi cũ: {e}"))?;}
+  fs::rename(&tmp,&script).map_err(|e|format!("Không thay được script Excel: {e}"))?;
+  log("Đã làm mới script Excel chuẩn UTF-8 BOM, thay thế file script cũ");
  }
  let per=c.max_pdf_pages*8;
  let chunks=if j.cards.is_empty(){1}else{j.cards.len().div_ceil(per)};
