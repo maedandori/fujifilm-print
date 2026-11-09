@@ -8,9 +8,11 @@ fn tray_main() {
  nwg::init().expect("Không thể khởi tạo Windows Tray");
  let mut window=nwg::MessageWindow::default();
  let mut tray=nwg::TrayNotification::default();
- let icon=nwg::Icon::from_system(nwg::OemIcon::Information);
+ let embedded=nwg::EmbedResource::load(None).expect("Không đọc được tài nguyên icon");
+ let icon=embedded.icon(1,Some((32,32)))
+   .unwrap_or_else(||nwg::Icon::from_system(nwg::OemIcon::Information));
  nwg::MessageWindow::builder().build(&mut window).unwrap();
- nwg::TrayNotification::builder().parent(&window).icon(Some(&icon)).tip(Some("Fujifilm Print Rust - Thử nghiệm")).build(&mut tray).unwrap();
+ nwg::TrayNotification::builder().parent(&window).icon(Some(&icon)).tip(Some("Fujifilm Print Agent Rust")).build(&mut tray).unwrap();
  let mut menu=nwg::Menu::default();
  nwg::Menu::builder().popup(true).parent(&window).build(&mut menu).unwrap();
  let mut start=nwg::MenuItem::default();
