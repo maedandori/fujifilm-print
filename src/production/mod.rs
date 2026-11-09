@@ -1,3 +1,4 @@
+pub mod status;
 pub mod socket;
 pub mod engine;
 use serde::{Deserialize,Serialize};
