@@ -107,10 +107,26 @@ fn startup(enabled: bool) -> Result<(),String> {
 
 #[cfg(windows)]
 fn startup_checked() -> bool {
-    std::process::Command::new("reg.exe").args(["query",r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run","/v","FujifilmPrintRust"])
-        .output().map(|o|o.status.success()).unwrap_or(false)
+    // Đọc Registry trực tiếp, không chạy reg.exe đồng bộ mỗi lần mở cửa sổ.
+    use std::{ffi::c_void,ptr};
+    #[link(name="advapi32")]
+    unsafe extern "system" {
+        fn RegOpenKeyExW(root:*mut c_void, sub:*const u16, options:u32,access:u32,key:*mut *mut c_void)->i32;
+        fn RegQueryValueExW(key:*mut c_void,value:*const u16,reserved:*mut u32,kind:*mut u32,
+           data:*mut u8,size:*mut u32)->i32;
+        fn RegCloseKey(key:*mut c_void)->i32;
+    }
+    fn wide(v:&str)->Vec<u16>{v.encode_utf16().chain(std::iter::once(0)).collect()}
+    let mut handle=ptr::null_mut();
+    unsafe {
+        let root=0x80000001usize as *mut c_void; // HKEY_CURRENT_USER
+        if RegOpenKeyExW(root,wide(r"Software\Microsoft\Windows\CurrentVersion\Run").as_ptr(),0,0x20019,&mut handle)!=0{return false}
+        let mut size=0u32;let mut kind=0u32;
+        let ok=RegQueryValueExW(handle,wide("FujifilmPrintRust").as_ptr(),ptr::null_mut(),&mut kind,ptr::null_mut(),&mut size)==0;
+        let _=RegCloseKey(handle);
+        ok && size>0
+    }
 }
-
 
 #[cfg(windows)]
 fn test_connection(url_input:&str, token_input:&str) -> Result<String,String> {
@@ -155,7 +171,7 @@ fn test_connection(url_input:&str, token_input:&str) -> Result<String,String> {
 fn main() {
     use native_windows_gui as nwg;
     use production::Config;
-    use std::{rc::Rc, cell::RefCell};
+    use std::{rc::Rc, sync::mpsc};
 
     nwg::init().expect("Không thể mở Print Settings");
     nwg::Font::set_global_family("Segoe UI").unwrap();
@@ -188,7 +204,7 @@ fn main() {
     let mut p_label=nwg::Label::default();
     nwg::Label::builder().text("Máy in Windows / Windowsプリンター").parent(&window).position((20,104)).size((320,28)).build(&mut p_label).unwrap();
     let mut printers=vec!["(Máy in mặc định Windows)".to_string()];
-    printers.extend(installed_printers());
+    // Chỉ dùng máy in đã lưu để cửa sổ xuất hiện ngay; tải danh sách trên luồng nền.
     if !c.printer_name.is_empty()&&!printers.contains(&c.printer_name){printers.push(c.printer_name.clone());}
     let printer_index=printers.iter().position(|s|s==&c.printer_name).unwrap_or(0);
     let mut printer=nwg::ComboBox::<String>::default();
@@ -228,12 +244,35 @@ fn main() {
     nwg::Button::builder().text("Lưu cấu hình / 設定を保存").parent(&window).position((465,633)).size((205,42)).build(&mut save).unwrap();
     nwg::Button::builder().text("Đóng / 閉じる").parent(&window).position((692,633)).size((150,42)).build(&mut close).unwrap();
 
+    // Spooler có thể chặn rất lâu nếu có máy in mạng offline.
+    // Tuyệt đối không gọi EnumPrintersW trên luồng giao diện.
+    let mut printer_notice=nwg::Notice::default();
+    nwg::Notice::builder().parent(&window).build(&mut printer_notice).unwrap();
+    let notice_handle=printer_notice.handle;
+    let notice_sender=printer_notice.sender();
+    let (printer_tx,printer_rx)=mpsc::channel::<Vec<String>>();
+    let printer_refresh_tx=printer_tx.clone();
+    std::thread::spawn(move||{
+        let found=installed_printers();
+        if printer_tx.send(found).is_ok(){notice_sender.notice();}
+    });
     let inputs=Rc::new(inputs);
     let p=Rc::new(printer);let m=Rc::new(mode);
     let a=Rc::new(auto);let b=Rc::new(boot);
     let handles=(save.handle,close.handle,refresh.handle,browse_xlsx.handle,browse_folder.handle,browse_exe.handle,test.handle);
     let win=window.handle;
     let callback=nwg::full_bind_event_handler(&win,move|ev,_data,h|{
+        if ev==nwg::Event::OnNotice && h==notice_handle {
+            if let Ok(found)=printer_rx.try_recv(){
+                let selected=p.selection_string().unwrap_or_default();
+                let mut options=vec!["(Máy in mặc định Windows)".to_string()];
+                options.extend(found);
+                if !selected.is_empty()&&!options.contains(&selected){options.push(selected.clone());}
+                p.set_collection(options);
+                p.set_selection_string(&selected);
+            }
+            return;
+        }
         if ev==nwg::Event::OnWindowClose&&h==win {nwg::stop_thread_dispatch();return}
         if ev!=nwg::Event::OnButtonClick {return}
         if h==handles.1 {nwg::stop_thread_dispatch();return}
@@ -245,11 +284,12 @@ fn main() {
                 Err(msg)=>{nwg::error_message("Kiểm tra URL / Token thất bại",&msg);}
             }
         } else if h==handles.2 {
-            // Đóng/mở lại GUI để tạo lại danh sách đã lấy từ Windows Spooler.
-            if let Ok(exe)=std::env::current_exe(){
-                let _=std::process::Command::new(exe).spawn();
-                nwg::stop_thread_dispatch();
-            }
+            // Làm mới từ luồng nền; không đóng cửa sổ và không mất các trường đang nhập.
+            let sender=printer_notice.sender();
+            let tx=printer_refresh_tx.clone();
+            std::thread::spawn(move||{
+                if tx.send(installed_printers()).is_ok(){sender.notice();}
+            });
         } else if h==handles.3 {if let Some(s)=pick_file("xlsx"){inputs[3].set_text(&s);}}
         else if h==handles.4 {if let Some(s)=pick_file("folder"){inputs[5].set_text(&s);}}
         else if h==handles.5 {if let Some(s)=pick_file("exe"){inputs[6].set_text(&s);}}
