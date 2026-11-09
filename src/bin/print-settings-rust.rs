@@ -37,8 +37,8 @@ fn pick_file(kind: &str) -> Option<String> {
 #[cfg(windows)]
 fn startup(enabled: bool) -> Result<(),String> {
     use std::process::Command;
-    let exe=production::Config::base_dir().join("Print-Agent-Rust.exe");
-    if enabled && !exe.is_file(){return Err("Thiếu Print-Agent-Rust.exe trong thư mục ứng dụng".into())}
+    let exe=production::Config::base_dir().join("Print-Agent.exe");
+    if enabled && !exe.is_file(){return Err("Thiếu Print-Agent.exe trong thư mục ứng dụng".into())}
     let key=r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
     let status=if enabled {
         Command::new("reg.exe").args(["add",key,"/v","FujifilmPrintRust","/t","REG_SZ","/d",&format!("\"{}\"",exe.display()),"/f"]).status()
