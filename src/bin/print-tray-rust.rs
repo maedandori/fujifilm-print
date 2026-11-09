@@ -21,7 +21,7 @@ fn tray_main() {
  let mut exit=nwg::MenuItem::default();
  let mut update=nwg::MenuItem::default();
  let mut diagnostic=nwg::MenuItem::default();
- nwg::MenuItem::builder().text("Bắt đầu nhận lệnh (in thật) / 開始").parent(&menu).build(&mut start).unwrap();
+ nwg::MenuItem::builder().text("Khởi động lại kết nối / 再接続").parent(&menu).build(&mut start).unwrap();
  nwg::MenuItem::builder().text("Dừng sau job hiện tại / 停止").parent(&menu).build(&mut stop).unwrap();
  nwg::MenuItem::builder().text("Print Settings / 設定").parent(&menu).build(&mut settings).unwrap();
  nwg::MenuItem::builder().text("Xem nhật ký / ログ").parent(&menu).build(&mut log).unwrap();
@@ -30,13 +30,26 @@ fn tray_main() {
  nwg::MenuItem::builder().text("Kiểm tra cập nhật Rust / 更新確認").parent(&menu).build(&mut update).unwrap();
  nwg::MenuItem::builder().text("Thoát giao diện / 終了").parent(&menu).build(&mut exit).unwrap();
  let base=std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
+ let _instance_guard=match crate::single_instance(){Some(g)=>g,None=>{nwg::simple_message("Fujifilm Rust","Print Agent đã mở trên System Tray.");return}};
+ let started_child=match check_local_config(&base){
+    Err(e)=>{production::log(&format!("Không tự kết nối: {e}"));None},
+    Ok(())=>{
+     let _=std::fs::remove_file(base.join("rust-stop-request.flag"));
+     match Command::new(std::env::current_exe().unwrap()).args(["--core","--enable-live"])
+       .creation_flags(0x08000000).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn(){
+        Ok(p)=>{production::log("Print Agent đã tự nhận lệnh. Đang gửi heartbeat tới Cloudflare.");Some(p)},
+        Err(e)=>{production::log(&format!("Không mở được Core: {e}"));None}
+     }
+    }
+ };
+
  // Rust updater kiểm tra bản phát hành riêng mỗi 6 giờ khi được bật trong config.ini.
  let updater=std::env::current_exe().unwrap();
  if crate::enabled_updates(&base){
    let _=Command::new(&updater).arg("--update-check").arg("--watch").arg("--tray-pid").arg(std::process::id().to_string())
      .creation_flags(0x08000000).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
  }
- let process:Rc<RefCell<Option<Child>>>=Rc::new(RefCell::new(None));
+ let process:Rc<RefCell<Option<Child>>>=Rc::new(RefCell::new(started_child));
  let child=Rc::clone(&process);
  let handles=(tray.handle,start.handle,stop.handle,settings.handle,log.handle,status.handle,exit.handle,update.handle,diagnostic.handle);
  let menu=Rc::new(menu);let m=Rc::clone(&menu);let win=window.handle;
@@ -49,12 +62,10 @@ fn tray_main() {
    let exe=std::env::current_exe().unwrap();
    if !exe.exists(){nwg::error_message("Fujifilm Rust","Không tìm thấy Print-Agent.exe.");return}
    if let Err(e)=check_local_config(&base){nwg::error_message("Chưa thể khởi động Agent",&e);return}
-   let msg="CHÚ Ý: --enable-live sẽ nhận job thật từ Cloudflare và có thể IN GIẤY. Chỉ thử trên máy an toàn. Tiếp tục?";
-   if nwg::message(&nwg::MessageParams{title:"Bật in thật?",content:msg,buttons:nwg::MessageButtons::YesNo,icons:nwg::MessageIcons::Warning})!=nwg::MessageChoice::Yes{return}
    let _=std::fs::remove_file(base.join("rust-stop-request.flag"));
    match Command::new(exe).args(["--core","--enable-live"]).creation_flags(0x08000000).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn(){
     Ok(mut proc)=>{
-      std::thread::sleep(std::time::Duration::from_millis(350));
+
       match proc.try_wait(){
        Ok(Some(code))=>{
          *guard=Some(proc);
@@ -77,7 +88,7 @@ fn tray_main() {
   }else if h==handles.5 {
    let mut guard=child.borrow_mut();
    let message=match guard.as_mut(){
-     None=>"Agent chưa bật nhận lệnh. Đây không phải lỗi. Nhấp phải icon rồi chọn 'Bắt đầu nhận lệnh (in thật)' khi đã cấu hình và sẵn sàng thử in.".to_string(),
+     None=>"Agent chưa chạy. Kiểm tra cấu hình rồi chọn 'Bắt đầu nhận lệnh (in thật)' khi đã cấu hình và sẵn sàng thử in.".to_string(),
      Some(proc)=>match proc.try_wait(){
        Ok(None)=>"Agent đang chạy. Để xác định kết nối Cloudflare, mở nhật ký print-agent-rust.log.".to_string(),
        Ok(Some(exit))=>format!("Agent đã thoát. Mã thoát: {:?}. Mở nhật ký để xem nguyên nhân; kiểm tra config.ini và AgentToken.",exit.code()),
@@ -122,12 +133,7 @@ fn check_local_config(base:&std::path::Path)->Result<(),String>{
  let url=get("ApiBaseUrl");
  if !(url.starts_with("https://")||url.starts_with("http://localhost:")||url.starts_with("http://127.0.0.1:")){return Err("ApiBaseUrl phải là HTTPS hợp lệ (hoặc HTTP localhost).".into())}
  if get("AgentToken").is_empty(){return Err("AgentToken đang trống. Hãy lưu token trong Print Settings.".into())}
- let template=get("TemplatePath");
- if template.is_empty(){return Err("Chưa chọn TemplatePath.".into())}
- let path=std::path::Path::new(&template);
- let template_path=if path.is_absolute(){path.to_path_buf()}else{base.join(path)};
- if !template_path.is_file(){return Err(format!("Không thấy mẫu XLSX: {}. Hãy chọn lại trong Print Settings.",template_path.display()))}
- // Script Excel PDF được nhúng bên trong EXE và tạo tự động khi in.
+ // Heartbeat vẫn chạy dù template XLSX chưa được chọn, các lệnh in sẽ báo lỗi riêng.
  Ok(())
 }
 
@@ -150,4 +156,29 @@ fn main(){
    return;
  }
  tray_main();
+}
+
+#[cfg(windows)]
+struct InstanceMutex(*mut std::ffi::c_void);
+#[cfg(windows)]
+impl Drop for InstanceMutex {
+ fn drop(&mut self) {
+   #[link(name="kernel32")] unsafe extern "system" {fn CloseHandle(h:*mut std::ffi::c_void)->i32;}
+   unsafe {let _=CloseHandle(self.0);}
+ }
+}
+#[cfg(windows)]
+fn single_instance()->Option<InstanceMutex>{
+ #[link(name="kernel32")] unsafe extern "system" {
+  fn CreateMutexW(attrs:*mut std::ffi::c_void,initial:i32,name:*const u16)->*mut std::ffi::c_void;
+  fn GetLastError()->u32;
+  fn CloseHandle(h:*mut std::ffi::c_void)->i32;
+ }
+ let name:Vec<u16>="Local\\FujifilmPrintRustTray".encode_utf16().chain(std::iter::once(0)).collect();
+ unsafe {
+  let handle=CreateMutexW(std::ptr::null_mut(),0,name.as_ptr());
+  if handle.is_null(){return None}
+  if GetLastError()==183{let _=CloseHandle(handle);return None}
+  Some(InstanceMutex(handle))
+ }
 }
