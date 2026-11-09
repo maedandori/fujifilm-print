@@ -52,7 +52,7 @@ fn main(){
       pdf_output_path:get(5),pdf_printer_exe:get(6),print_mode:get(7),poll_seconds,max_pdf_pages,auto_update_enabled:get(10)!="0"};
      c.save(&Config::base_dir().join("config.ini"))
     },_=>Err("PollSeconds hoặc MaxPdfPages không hợp lệ".into())};
-    match result{Ok(())=>nwg::simple_message("Fujifilm Print","Đã lưu config.ini / 保存しました"),Err(err)=>nwg::error_message("Không thể lưu / 保存失敗",&err)}
+    match result{Ok(())=>{nwg::simple_message("Fujifilm Print","Đã lưu config.ini / 保存しました");},Err(err)=>{nwg::error_message("Không thể lưu / 保存失敗",&err);}}
    }
    _=>{}
   }
