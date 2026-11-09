@@ -34,7 +34,8 @@ try {
     $name=if($null -ne $card){[string]$card.name}else{''}
     $color=if($null -ne $card){[string]$card.color}else{''}
     $qty=if($null -ne $card){[string]$card.quantity}else{''}
-    $number=if($null -ne $card){[string]([int]$job.startNumber+$index)+(if($card.isFinal){'(完)'}else{''})}else{''}
+    $number=''
+    if($null -ne $card) { $number=[string]([int]$job.startNumber+$index); if($card.isFinal){$number+='(完)'} }
     $sheet.Range($names[$i]).Value2=$name
     $sheet.Range($colors[$i]).Value2=$color
     $sheet.Range($quantities[$i]).Value2=$qty
