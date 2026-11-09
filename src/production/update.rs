@@ -26,7 +26,7 @@ pub mod app {
     }
     fn process_running(image:&str)->bool{
         let filter=format!("IMAGENAME eq {image}");
-        let result=Command::new("tasklist.exe").args(["/FI",&filter,"/FO","CSV","/NH"]).output();
+        let result=Command::new("tasklist.exe").args(["/FI",&filter,"/FO","CSV","/NH"]).creation_flags(0x08000000).stdin(Stdio::null()).output();
         result.ok().is_some_and(|o|String::from_utf8_lossy(&o.stdout).to_ascii_lowercase().contains(&image.to_ascii_lowercase()))
     }
     fn core_running(dir:&Path)->bool{
@@ -36,7 +36,7 @@ pub mod app {
     }
     fn parent_running(pid:u32)->bool{
         let filter=format!("PID eq {pid}");
-        Command::new("tasklist.exe").args(["/FI",&filter,"/FO","CSV","/NH"]).output()
+        Command::new("tasklist.exe").args(["/FI",&filter,"/FO","CSV","/NH"]).creation_flags(0x08000000).stdin(Stdio::null()).output()
           .ok().is_some_and(|o|String::from_utf8_lossy(&o.stdout).contains(&format!(",\"{pid}\",")))
     }
     pub fn check(tray_pid:u32)->Result<bool,String>{
