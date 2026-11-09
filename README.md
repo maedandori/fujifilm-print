@@ -63,3 +63,23 @@ Các chức năng đã có mã nguồn: đọc INI và agent-id.txt, JSON cards/
 - `submitted` chỉ có nghĩa đã gửi tới spooler; không chứng minh in xong.
 - Nếu có lỗi ở PDF chunk thứ hai, **không tự thử lại** vì chunk đầu có thể đã in.
 - Script PowerShell xuất PDF cần Windows PowerShell 5.1 và Excel đã cài. Rust native không thể tự thay thế Excel 2013 COM nếu cần giữ chính xác bố cục XLSX.
+
+
+## Cập nhật: System Tray, Settings kiểu C#, tự cập nhật Rust
+
+**Tên file:** Mở **Print-Agent-Rust.exe** để có biểu tượng System Tray (có thể nằm sau dấu ^ cạnh đồng hồ). **Print-Agent-Rust-Core.exe** là tiến trình thực thi nhận lệnh và in, không có giao diện riêng. Hai file phải nằm cùng thư mục.
+
+**Print-Settings-Rust.exe**:
+- Danh sách máy in Windows, chọn mặc định hoặc tên máy in cụ thể, nút Làm mới.
+- Chế độ in: Xuất PDF rồi in (pdfprint) hoặc Chỉ lưu PDF (pdf).
+- Nút chọn template XLSX, thư mục PDF, SumatraPDF.exe.
+- Chỉnh tên hiển thị trên web, URL, Token, polling, tối đa trang/PDF.
+- Checkbox tự động cập nhật và khởi động cùng Windows. Khởi động cùng Windows chỉ mở biểu tượng khay, KHÔNG tự bắt đầu in.
+
+**Auto-update Rust:** GitHub Actions tạo tag rust-v0.4.N, Release chứa fujifilm-rust-update.zip và fujifilm-rust-update.sha256. Print-Updater-Rust.exe kiểm tra bản phát hành mới 6 giờ/lần khi bật cấu hình, không cập nhật nếu Print-Agent-Rust-Core.exe đang chạy và chỉ cài khi SHA-256 đúng. Script cài đặt giữ config.ini, agent-id.txt, XLSX, PDF, log. Cần cài thủ công một lần đầu tiên. Không dùng Release của C#.
+
+**Thử an toàn:** Không chạy Rust Core --enable-live trên máy công ty cùng lúc với C# nếu sử dụng cùng Agent ID. Mở Print-Agent-Rust.exe, nhấp phải icon rồi chọn Settings. Chức năng Bắt đầu nhận lệnh (in thật) yêu cầu xác nhận. Trước đó thử PDF bằng Print-Agent-Rust-Core.exe --test-pdf với PrintMode=pdf.
+
+**Phụ thuộc:** Excel 2013 để xuất PDF, SumatraPDF để in, driver Windows và PowerShell 5.1. EXE chưa ký số có thể hiện cảnh báo SmartScreen.
+
+**Kiểm thử:** Cần xác minh build GitHub Actions Success và kiểm tra thực tế trên Windows. Chưa xác nhận in giấy thật hoặc update xuyên phiên bản.
