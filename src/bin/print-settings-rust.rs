@@ -176,8 +176,9 @@ fn main() {
     nwg::init().expect("Không thể mở Print Settings");
     nwg::Font::set_global_family("Segoe UI").unwrap();
 
+    let app_version=option_env!("FUJIFILM_BUILD_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
     let mut window=nwg::Window::default();
-    nwg::Window::builder().title("Fujifilm Print - Cài đặt máy in / 印刷設定 (Rust)")
+    nwg::Window::builder().title(&format!("Fujifilm Print Settings Rust v{app_version} / 印刷設定"))
         .size((870,745)).position((150,60)).build(&mut window).unwrap();
     let c=Config::load(&Config::base_dir().join("config.ini")).unwrap_or_default();
 
@@ -238,7 +239,7 @@ fn main() {
         .build(&mut boot).unwrap();
 
     let mut note=nwg::Label::default();
-    nwg::Label::builder().text("Lưu cấu hình: config.ini. Chỉ thử in khi đã kiểm tra mẫu Excel 2013 và máy in.")
+    nwg::Label::builder().text(&format!("Phiên bản Settings: v{app_version} | Lưu config.ini | Excel 2013 cần thiết để xuất PDF."))
         .parent(&window).position((20,579)).size((820,28)).build(&mut note).unwrap();
     let mut save=nwg::Button::default();let mut close=nwg::Button::default();
     nwg::Button::builder().text("Lưu cấu hình / 設定を保存").parent(&window).position((465,633)).size((205,42)).build(&mut save).unwrap();
