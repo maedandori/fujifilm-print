@@ -11,8 +11,8 @@ try {
  if(-not (Test-Path -LiteralPath $Template -PathType Leaf)) {throw "Không tìm thấy XLSX: $Template"}
  $dir=[System.IO.Path]::GetDirectoryName($Output)
  [System.IO.Directory]::CreateDirectory($dir) | Out-Null
- if(Test-Path -LiteralPath $Output) {Remove-Item -LiteralPath $Output -Force -ErrorAction Stop}
- if(Test-Path -LiteralPath $Output) {throw "Không xóa được PDF cũ"}
+ # Chỉ tạo file mới, tuyệt đối không xóa PDF cũ đang được trình đọc/OneDrive hoặc SumatraPDF sử dụng.
+ if(Test-Path -LiteralPath $Output) {throw "Tệp PDF đầu ra đã tồn tại; yêu cầu tên file duy nhất: $Output"}
  $excel=New-Object -ComObject Excel.Application
  $excel.Visible=$false;$excel.DisplayAlerts=$false;$excel.AutomationSecurity=3
  $book=$excel.Workbooks.Open($Template,0,$true)
