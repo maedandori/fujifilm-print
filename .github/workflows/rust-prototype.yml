@@ -37,6 +37,11 @@ jobs:
           [System.Management.Automation.Language.Parser]::ParseFile($file,[ref]$tokens,[ref]$errors) | Out-Null
           if($errors.Count -ne 0){$errors | ForEach-Object {Write-Error $_.ToString()}; throw 'PowerShell parser lỗi'}
           Write-Host 'UTF-8 BOM và cú pháp PowerShell 5.1 OK'
+          $installer=Join-Path (Get-Location) 'scripts/install-rust-update.ps1'
+          $t=$null; $e=$null
+          [System.Management.Automation.Language.Parser]::ParseFile($installer,[ref]$t,[ref]$e) | Out-Null
+          if($e.Count -ne 0){$e | ForEach-Object {Write-Error $_.ToString()}; throw 'Updater PowerShell parse error'}
+          Write-Host 'Rust updater PowerShell parser OK'
       - name: Build Print Agent với icon máy in
         run: cargo build --release --bin print-tray-rust --features agent-icon
       - name: Build Print Settings với icon bánh răng
