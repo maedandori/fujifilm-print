@@ -75,9 +75,14 @@ jobs:
         run: |
           $items=@('Print-Agent-Rust.exe','Print-Agent-Rust-Core.exe','Print-Settings-Rust.exe','Print-Updater-Rust.exe','scripts/export-excel-pdf.ps1')
           foreach($item in $items){if(-not (Test-Path "benchmark-output/$item")){throw "Thiếu $item"}}
-          Push-Location benchmark-output
+          New-Item -ItemType Directory -Force -Path update-package/scripts | Out-Null
+          foreach($name in $items){
+            $dest=Join-Path update-package $name
+            Copy-Item -LiteralPath (Join-Path benchmark-output $name) -Destination $dest -Force
+          }
+          Push-Location update-package
           try {
-            Compress-Archive -Path $items -DestinationPath ../fujifilm-rust-update.zip -CompressionLevel Optimal
+            Compress-Archive -Path * -DestinationPath ../fujifilm-rust-update.zip -CompressionLevel Optimal
           } finally {Pop-Location}
           $hash=(Get-FileHash fujifilm-rust-update.zip -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  fujifilm-rust-update.zip" | Set-Content -Encoding ascii fujifilm-rust-update.sha256
