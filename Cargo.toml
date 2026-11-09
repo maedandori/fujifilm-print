@@ -4,6 +4,13 @@ version = "0.1.0"
 edition = "2021"
 description = "Rust Print Agent dry-run and benchmark prototype"
 
+[features]
+agent-icon = []
+settings-icon = []
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
+
 [dependencies]
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
@@ -15,7 +22,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 tungstenite = { version = "0.24", features = ["native-tls"] }
 
 [target.'cfg(windows)'.dependencies]
-native-windows-gui = { version = "1.0", features = ["tray-notification", "message-window", "menu", "cursor"] }
+native-windows-gui = { version = "1.0", features = ["tray-notification", "message-window", "menu", "cursor", "embed-resource"] }
 
 [profile.release]
 opt-level = "z"
