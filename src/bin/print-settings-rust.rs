@@ -177,7 +177,7 @@ fn read_update_progress() -> Option<(u32,String)> {
     let stage=v["stage"].as_str().unwrap_or("");
     let msg=v["message"].as_str().unwrap_or("Đang kiểm tra cập nhật");
     // 100% only when download or installation really reached that point.
-    let status=if stage=="error"{"Lỗi cập nhật"}else{msg};
+    let status=if stage=="error"{format!("Lỗi cập nhật: {msg}")}else{msg.to_string()};
     Some((percent,format!("{status} — {percent}%")))
 }
 
