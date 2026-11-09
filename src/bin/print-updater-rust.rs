@@ -39,8 +39,7 @@ mod app {
           .ok().is_some_and(|o|String::from_utf8_lossy(&o.stdout).contains(&format!(",\"{pid}\",")))
     }
     pub fn check(tray_pid:u32)->Result<bool,String>{
-        // Tuyệt đối không cập nhật khi Core đang xử lý lệnh in.
-        if process_running("Print-Agent-Rust-Core.exe"){log("Core đang chạy: hoãn cập nhật");return Ok(false)}
+        // Chỉ yêu cầu dừng Core nếu đã xác minh có bản cập nhật mới.
         let dir=executable_dir()?;
         let raw=ureq::AgentBuilder::new().timeout(Duration::from_secs(20)).build()
             .get(REPO).set("User-Agent","Fujifilm-Rust-Updater")
@@ -67,6 +66,20 @@ mod app {
         if expected.len()!=64||!expected.bytes().all(|b|b.is_ascii_hexdigit()){return Err("SHA256 không hợp lệ".into())}
         let bytes=fetch(&zip_url,120*1024*1024)?;
         if format!("{:x}",Sha256::digest(&bytes))!=expected.to_ascii_lowercase(){return Err("SHA256 gói cập nhật không khớp".into())}
+        // Sau khi xác minh SHA-256, yêu cầu Core dừng hợp lệ giữa hai job.
+        if process_running("Print-Agent-Rust-Core.exe") {
+            let stop=dir.join("rust-stop-request.flag");
+            fs::write(&stop,"stop-for-update").map_err(|e|e.to_string())?;
+            let mut stopped=false;
+            for _ in 0..300 {
+                if !process_running("Print-Agent-Rust-Core.exe"){stopped=true;break}
+                thread::sleep(Duration::from_secs(1));
+            }
+            if !stopped {
+                log("Core chưa dừng (có thể đang in). Hoãn cập nhật để tránh gián đoạn.");
+                return Ok(false)
+            }
+        }
         // Không ghi file chương trình trước khi xác minh toàn bộ.
         let folder=std::env::temp_dir().join(format!("fujifilm-rust-{}",uuid::Uuid::new_v4()));
         fs::create_dir_all(&folder).map_err(|e|e.to_string())?;
