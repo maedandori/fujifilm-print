@@ -1,6 +1,8 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
+#[path = "../production/mod.rs"] mod production;
+#[path = "../production/update.rs"] mod update;
 #[cfg(windows)]
-fn main() {
+fn tray_main() {
  use native_windows_gui as nwg;
  use std::{cell::RefCell,rc::Rc,process::{Command,Child,Stdio},os::windows::process::CommandExt};
  nwg::init().expect("Không thể khởi tạo Windows Tray");
@@ -29,9 +31,9 @@ fn main() {
  nwg::MenuItem::builder().text("Thoát giao diện / 終了").parent(&menu).build(&mut exit).unwrap();
  let base=std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
  // Rust updater kiểm tra bản phát hành riêng mỗi 6 giờ khi được bật trong config.ini.
- let updater=base.join("Print-Updater-Rust.exe");
- if updater.is_file() && crate::enabled_updates(&base){
-   let _=Command::new(&updater).arg("--watch").arg("--tray-pid").arg(std::process::id().to_string())
+ let updater=std::env::current_exe().unwrap();
+ if crate::enabled_updates(&base){
+   let _=Command::new(&updater).arg("--update-check").arg("--watch").arg("--tray-pid").arg(std::process::id().to_string())
      .creation_flags(0x08000000).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
  }
  let process:Rc<RefCell<Option<Child>>>=Rc::new(RefCell::new(None));
@@ -44,13 +46,13 @@ fn main() {
   if h==handles.1 {
    let mut guard=child.borrow_mut();
    if let Some(p)=guard.as_mut(){if p.try_wait().ok().flatten().is_none(){nwg::simple_message("Fujifilm Rust","Agent đang hoạt động");return}}
-   let exe=base.join("Print-Agent-Rust-Core.exe");
-   if !exe.exists(){nwg::error_message("Fujifilm Rust","Không tìm thấy Print-Agent-Rust-Core.exe. Giải nén đầy đủ artifact Rust.");return}
+   let exe=std::env::current_exe().unwrap();
+   if !exe.exists(){nwg::error_message("Fujifilm Rust","Không tìm thấy Print-Agent.exe.");return}
    if let Err(e)=check_local_config(&base){nwg::error_message("Chưa thể khởi động Agent",&e);return}
    let msg="CHÚ Ý: --enable-live sẽ nhận job thật từ Cloudflare và có thể IN GIẤY. Chỉ thử trên máy an toàn. Tiếp tục?";
    if nwg::message(&nwg::MessageParams{title:"Bật in thật?",content:msg,buttons:nwg::MessageButtons::YesNo,icons:nwg::MessageIcons::Warning})!=nwg::MessageChoice::Yes{return}
    let _=std::fs::remove_file(base.join("rust-stop-request.flag"));
-   match Command::new(exe).arg("--enable-live").creation_flags(0x08000000).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn(){
+   match Command::new(exe).args(["--core","--enable-live"]).creation_flags(0x08000000).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn(){
     Ok(mut proc)=>{
       std::thread::sleep(std::time::Duration::from_millis(350));
       match proc.try_wait(){
@@ -68,7 +70,7 @@ fn main() {
    let _=std::fs::write(base.join("rust-stop-request.flag"),"stop");
    nwg::simple_message("Fujifilm Rust","Đã yêu cầu dừng sau khi hoàn thành job hiện tại.");
   }else if h==handles.3 {
-   let exe=base.join("Print-Settings-Rust.exe");if let Err(e)=Command::new(exe).spawn(){nwg::error_message("Không mở được Settings",&e.to_string());}
+   let exe=base.join("Print-Settings.exe");if let Err(e)=Command::new(exe).spawn(){nwg::error_message("Không mở được Settings",&e.to_string());}
   }else if h==handles.4 {
    let path=base.join("print-agent-rust.log");
    if let Err(e)=Command::new("notepad.exe").arg(path).spawn(){nwg::error_message("Không mở được nhật ký",&e.to_string());}
@@ -85,12 +87,12 @@ fn main() {
    nwg::simple_message("Trạng thái Fujifilm Rust",&message);
   }else if h==handles.8 {
    match check_local_config(&base){
-     Ok(())=>nwg::simple_message("Kiểm tra cấu hình","Các mục cốt lõi của config.ini hợp lệ. Chưa kiểm tra xác thực Cloudflare hoặc máy in."),
-     Err(e)=>nwg::error_message("Cấu hình chưa sẵn sàng",&e)
-   }
+     Ok(())=>{nwg::simple_message("Kiểm tra cấu hình","Các mục cốt lõi của config.ini hợp lệ. Chưa kiểm tra xác thực Cloudflare hoặc máy in.");},
+     Err(e)=>{nwg::error_message("Cấu hình chưa sẵn sàng",&e);}
+   };
   }else if h==handles.7 {
-   let exe=base.join("Print-Updater-Rust.exe");
-   if let Err(e)=Command::new(exe).arg("--tray-pid").arg(std::process::id().to_string())
+   let exe=std::env::current_exe().unwrap();
+   if let Err(e)=Command::new(exe).arg("--update-check").arg("--tray-pid").arg(std::process::id().to_string())
       .creation_flags(0x08000000).spawn(){nwg::error_message("Không kiểm tra được cập nhật",&e.to_string());}
    else{nwg::simple_message("Fujifilm Rust","Đã yêu cầu kiểm tra GitHub Release Rust; kết quả ghi trong rust-update.log.");}
   }else if h==handles.6 {
@@ -125,6 +127,27 @@ fn check_local_config(base:&std::path::Path)->Result<(),String>{
  let path=std::path::Path::new(&template);
  let template_path=if path.is_absolute(){path.to_path_buf()}else{base.join(path)};
  if !template_path.is_file(){return Err(format!("Không thấy mẫu XLSX: {}. Hãy chọn lại trong Print Settings.",template_path.display()))}
- if !base.join("scripts").join("export-excel-pdf.ps1").is_file(){return Err("Thiếu scripts/export-excel-pdf.ps1. Giải nén nguyên thư mục scripts.".into())}
+ // Script Excel PDF được nhúng bên trong EXE và tạo tự động khi in.
  Ok(())
+}
+
+#[cfg(windows)]
+fn main(){
+ let args:Vec<String>=std::env::args().collect();
+ if args.iter().any(|v|v=="--update-check"){update::app::main();return;}
+ if args.iter().any(|v|v=="--core"){
+   if let Err(e)=production::engine::run(args.iter().any(|v|v=="--enable-live")){production::log(&format!("LỖI CORE: {e}"));std::process::exit(1);}
+   return;
+ }
+ if args.iter().any(|v|v=="--test-pdf"){
+   let result=(||->Result<(),String>{
+     let c=production::Config::load(&production::Config::base_dir().join("config.ini"))?;
+     let data=std::fs::read_to_string(production::Config::base_dir().join("sample-job.json")).map_err(|e|e.to_string())?;
+     let j=production::Job::parse(&data)?;
+     production::engine::pdf_output(&c,&j)
+   })();
+   if let Err(e)=result{production::log(&format!("LỖI PDF: {e}"));std::process::exit(1)}
+   return;
+ }
+ tray_main();
 }
