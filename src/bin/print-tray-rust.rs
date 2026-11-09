@@ -21,6 +21,7 @@ fn tray_main() {
  let mut exit=nwg::MenuItem::default();
  let mut update=nwg::MenuItem::default();
  let mut diagnostic=nwg::MenuItem::default();
+ let mut version=nwg::MenuItem::default();
  nwg::MenuItem::builder().text("Khởi động lại kết nối / 再接続").parent(&menu).build(&mut start).unwrap();
  nwg::MenuItem::builder().text("Dừng sau job hiện tại / 停止").parent(&menu).build(&mut stop).unwrap();
  nwg::MenuItem::builder().text("Print Settings / 設定").parent(&menu).build(&mut settings).unwrap();
@@ -28,6 +29,7 @@ fn tray_main() {
  nwg::MenuItem::builder().text("Trạng thái / 状態").parent(&menu).build(&mut status).unwrap();
  nwg::MenuItem::builder().text("Kiểm tra cấu hình / 設定確認").parent(&menu).build(&mut diagnostic).unwrap();
  nwg::MenuItem::builder().text("Kiểm tra cập nhật Rust / 更新確認").parent(&menu).build(&mut update).unwrap();
+ nwg::MenuItem::builder().text(&format!("Phiên bản Rust v{}",option_env!("FUJIFILM_BUILD_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))).parent(&menu).build(&mut version).unwrap();
  nwg::MenuItem::builder().text("Thoát giao diện / 終了").parent(&menu).build(&mut exit).unwrap();
  let base=std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
  let _instance_guard=match crate::single_instance(){Some(g)=>g,None=>{nwg::simple_message("Fujifilm Rust","Print Agent đã mở trên System Tray.");return}};
@@ -51,7 +53,7 @@ fn tray_main() {
  }
  let process:Rc<RefCell<Option<Child>>>=Rc::new(RefCell::new(started_child));
  let child=Rc::clone(&process);
- let handles=(tray.handle,start.handle,stop.handle,settings.handle,log.handle,status.handle,exit.handle,update.handle,diagnostic.handle);
+ let handles=(tray.handle,start.handle,stop.handle,settings.handle,log.handle,status.handle,exit.handle,update.handle,diagnostic.handle,version.handle);
  let menu=Rc::new(menu);let m=Rc::clone(&menu);let win=window.handle;
  let callback=nwg::full_bind_event_handler(&win,move|ev,_data,h|{
   if ev==nwg::Event::OnContextMenu && h==handles.0 {let (x,y)=nwg::GlobalCursor::position();m.popup(x,y);return}
@@ -96,6 +98,8 @@ fn tray_main() {
      }
    };
    nwg::simple_message("Trạng thái Fujifilm Rust",&message);
+  }else if h==handles.9 {
+   nwg::simple_message("Fujifilm Print Rust",&format!("Phiên bản đang chạy: v{}",option_env!("FUJIFILM_BUILD_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"))));
   }else if h==handles.8 {
    match check_local_config(&base){
      Ok(())=>{nwg::simple_message("Kiểm tra cấu hình","Các mục cốt lõi của config.ini hợp lệ. Chưa kiểm tra xác thực Cloudflare hoặc máy in.");},
