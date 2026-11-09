@@ -4,15 +4,20 @@
 
 **AN TOÀN:** Không kết nối Cloudflare production, không gửi lệnh tới máy in, không thay đổi Print Agent hiện tại. Chưa thay thế bản C# tại công ty.
 
+## Giao diện Windows v0.2.0
+
+Nhấp đúp **Fujifilm-Print-Rust-Test.exe** để mở cửa sổ. Có nút kiểm tra JSON mẫu, benchmark và đóng cửa sổ. File **Fujifilm-Print-Rust-CLI.exe** là bản dành cho lệnh benchmark qua PowerShell, mở trực tiếp sẽ thoát như phiên bản cũ. Giao diện chỉ chạy trên Windows, chưa in thật.
+
 ## Chạy
 
 Cần Rust stable trên Windows 10/11 x64:
 
 ```powershell
 cargo test --release
-cargo run --release -- --benchmark 100000
-cargo run --release -- --simulate sample-job.json
-cargo run --release -- --idle-seconds 30
+cargo run --release --bin fujifilm-print-gui
+cargo run --release --bin fujifilm-print-rust -- --benchmark 100000
+cargo run --release --bin fujifilm-print-rust -- --simulate sample-job.json
+cargo run --release --bin fujifilm-print-rust -- --idle-seconds 30
 ```
 
 Để nhận EXE không cần cài Rust trên máy, mở **Actions > Rust Print Agent (thử nghiệm)**, tải artifact `Rust-Print-Agent-Windows-x64` và giải nén.
