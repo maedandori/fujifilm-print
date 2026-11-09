@@ -173,6 +173,11 @@ pub fn run(live:bool)->Result<(),String>{
  if !live {log("Rust Agent chạy CHẾ ĐỘ AN TOÀN; dùng --enable-live để thực sự nhận lệnh từ Cloudflare");return Ok(())}
  // Mặc định khi chạy live sẽ in thật nếu nhận job. Chỉ bật trên PC kiểm thử.
  let api=Api::new(&c,id.clone())?;
+ let active_path=Config::base_dir().join("rust-core-active.pid");
+ fs::write(&active_path,std::process::id().to_string()).map_err(|e|e.to_string())?;
+ struct ActiveGuard(PathBuf);
+ impl Drop for ActiveGuard {fn drop(&mut self){let _=fs::remove_file(&self.0);}}
+ let _active_guard=ActiveGuard(active_path);
  let wake=super::socket::start(&c,id);
  log("Kết nối Machine-Control Rust --enable-live");
  let stop_file=Config::base_dir().join("rust-stop-request.flag");
