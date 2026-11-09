@@ -11,7 +11,10 @@ pub fn pdf_output(c:&Config,j:&Job)->Result<(),String>{
  let mode=if c.print_mode=="printer"{"pdfprint"}else{&c.print_mode};
  let printer=if mode=="pdfprint"{Some(resolve_sumatra(c)?)}else{None};
  let script=Config::base_dir().join("scripts").join("export-excel-pdf.ps1");
- if !script.exists(){return Err(format!("Thiếu script Excel: {}",script.display()))}
+ if !script.exists(){
+  if let Some(parent)=script.parent(){fs::create_dir_all(parent).map_err(|e|e.to_string())?;}
+  fs::write(&script,include_str!("../../scripts/export-excel-pdf.ps1")).map_err(|e|format!("Không tạo được script Excel: {e}"))?;
+ }
  let per=c.max_pdf_pages*8;
  let chunks=if j.cards.is_empty(){1}else{j.cards.len().div_ceil(per)};
  for copy in 0..j.copies{
