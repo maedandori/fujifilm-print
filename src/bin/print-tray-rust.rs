@@ -121,7 +121,7 @@ fn tray_main() {
      production::log("Đã yêu cầu kết thúc Print Agent; Core sẽ dừng sau job hiện tại (nếu có).");
      nwg::stop_thread_dispatch();
     }
-    Err(e)=>nwg::error_message("Không thể kết thúc Agent",&format!("Không tạo được yêu cầu dừng: {e}")),
+    Err(e)=>{nwg::error_message("Không thể kết thúc Agent",&format!("Không tạo được yêu cầu dừng: {e}"));},
    }
   }
  });
