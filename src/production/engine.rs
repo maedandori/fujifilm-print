@@ -79,12 +79,12 @@ impl Api{
  }
  pub fn snapshot(&self,c:&Config){if let Err(e)=self.post("api/print-agent/config/snapshot",json!({"config":c.snapshot()})){log(&e)}}
  pub fn heartbeat(&self,c:&Config){
-  let name=if c.printer_name.is_empty(){"(Windows default)"}else{&c.printer_name};
+  let (name,valid,paper,windows_status)=super::status::printer_status(c);
   let machine=std::env::var("COMPUTERNAME").unwrap_or_else(|_|"Windows".into());
-  let valid=!name.is_empty(); // Driver flags cần được Windows spooler xác thực riêng.
+  
   let body=json!({"agentId":self.id,"machineName":machine,"printerName":name,
     "printerDisplayName":c.printer_display_name,"agentVersion":"0.3.0-rust",
-    "printerValid":valid,"paperStatus":"unknown","windowsStatus":0});
+    "printerValid":valid,"paperStatus":paper,"windowsStatus":windows_status});
   if let Err(e)=self.post("api/print-agent/status/heartbeat",body){log(&e)}
   let installed=Config::base_dir().join("SumatraPDF.exe").is_file();
   if let Err(e)=self.post("api/print-agent/pdf-tool/status",json!({"installed":installed})){log(&e)}
