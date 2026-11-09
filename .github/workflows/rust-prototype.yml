@@ -20,8 +20,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Cài Rust stable
         uses: dtolnay/rust-toolchain@stable
-      - name: Kiểm thử đúng hai ứng dụng
-        run: cargo test --release --bin print-tray-rust --bin print-settings-rust
+      - name: Kiểm thử Agent có icon máy in
+        run: cargo test --release --bin print-tray-rust --features agent-icon
+      - name: Kiểm thử Settings có icon bánh răng
+        run: cargo test --release --bin print-settings-rust --features settings-icon
       - name: Kiểm tra cú pháp PowerShell 5.1 với UTF-8 BOM
         shell: powershell
         run: |
@@ -35,8 +37,10 @@ jobs:
           [System.Management.Automation.Language.Parser]::ParseFile($file,[ref]$tokens,[ref]$errors) | Out-Null
           if($errors.Count -ne 0){$errors | ForEach-Object {Write-Error $_.ToString()}; throw 'PowerShell parser lỗi'}
           Write-Host 'UTF-8 BOM và cú pháp PowerShell 5.1 OK'
-      - name: Build đúng hai EXE
-        run: cargo build --release --bin print-tray-rust --bin print-settings-rust
+      - name: Build Print Agent với icon máy in
+        run: cargo build --release --bin print-tray-rust --features agent-icon
+      - name: Build Print Settings với icon bánh răng
+        run: cargo build --release --bin print-settings-rust --features settings-icon
       - name: Đóng gói hai EXE, không kèm binary phụ
         shell: pwsh
         run: |
