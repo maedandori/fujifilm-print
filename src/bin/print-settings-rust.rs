@@ -62,7 +62,7 @@ fn test_connection(url_input:&str, token_input:&str) -> Result<String,String> {
     let token=token_input.trim();
     if url.is_empty(){return Err("Chưa nhập URL Machine-Control.".into())}
     if token.is_empty(){return Err("Chưa nhập Agent Token.".into())}
-    let parsed=ureq::Url::parse(url).map_err(|_|"URL không hợp lệ.".to_string())?;
+    let parsed=url::Url::parse(url).map_err(|_|"URL không hợp lệ.".to_string())?;
     let is_local=matches!(parsed.host_str(),Some("localhost"|"127.0.0.1"));
     if parsed.scheme()!="https" && !(is_local && parsed.scheme()=="http") {
         return Err("Chỉ chấp nhận HTTPS; HTTP chỉ được dùng với localhost.".into())
