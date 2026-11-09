@@ -8,11 +8,13 @@ concurrency:
   group: rust-test-${{ github.ref }}
   cancel-in-progress: true
 permissions:
-  contents: read
+  contents: write
 jobs:
   build:
     name: Kiểm thử và build Rust trên Windows
     runs-on: windows-2022
+    env:
+      FUJIFILM_BUILD_VERSION: 0.4.${{ github.run_number }}
     steps:
       - name: Lấy mã nguồn
         uses: actions/checkout@v4
@@ -54,9 +56,11 @@ jobs:
           Copy-Item target/release/fujifilm-print-rust.exe benchmark-output/Fujifilm-Print-Rust-CLI.exe
           Copy-Item target/release/print-agent-rust.exe benchmark-output/Print-Agent-Rust-Core.exe
           Copy-Item target/release/print-settings-rust.exe benchmark-output/Print-Settings-Rust.exe
+          Copy-Item target/release/print-updater-rust.exe benchmark-output/Print-Updater-Rust.exe
           Copy-Item target/release/print-tray-rust.exe benchmark-output/Print-Agent-Rust.exe
           New-Item -ItemType Directory -Force -Path benchmark-output/scripts | Out-Null
           Copy-Item scripts/export-excel-pdf.ps1 benchmark-output/scripts/export-excel-pdf.ps1
+          Copy-Item scripts/install-rust-update.ps1 benchmark-output/scripts/install-rust-update.ps1
           Copy-Item sample-job.json benchmark-output/sample-job.json
           Copy-Item README.md benchmark-output/README.md
       - name: Lưu artifact để tải bằng iPhone hoặc PC
@@ -65,3 +69,23 @@ jobs:
           name: Rust-Print-Agent-Windows-x64
           path: benchmark-output/
           retention-days: 30
+      - name: Đóng gói bản cập nhật tự động Rust có SHA-256
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        run: |
+          $items=@('Print-Agent-Rust.exe','Print-Agent-Rust-Core.exe','Print-Settings-Rust.exe','Print-Updater-Rust.exe','scripts/export-excel-pdf.ps1')
+          foreach($item in $items){if(-not (Test-Path "benchmark-output/$item")){throw "Thiếu $item"}}
+          Push-Location benchmark-output
+          try {
+            Compress-Archive -Path $items -DestinationPath ../fujifilm-rust-update.zip -CompressionLevel Optimal
+          } finally {Pop-Location}
+          $hash=(Get-FileHash fujifilm-rust-update.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  fujifilm-rust-update.zip" | Set-Content -Encoding ascii fujifilm-rust-update.sha256
+      - name: Phát hành bản Rust riêng để các máy tự cập nhật
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag="rust-v${{ env.FUJIFILM_BUILD_VERSION }}"
+          gh release create $tag fujifilm-rust-update.zip fujifilm-rust-update.sha256 --title "Fujifilm Print Rust ${{ env.FUJIFILM_BUILD_VERSION }}" --notes "Bản Rust độc lập với C#. Kiểm tra SHA-256 trước khi cập nhật. Giữ config.ini, agent-id.txt, template và PDF." --latest --target "${{ github.sha }}"
