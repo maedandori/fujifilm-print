@@ -2,6 +2,8 @@ use super::{Config,Job,agent_id,log};
 use std::{fs,io::Read,path::{Path,PathBuf},process::{Command,Stdio},thread,time::{Duration,Instant}};
 use serde_json::{json,Value};
 use sha2::{Digest,Sha256};
+use std::sync::atomic::{AtomicU64,Ordering};
+static LAST_HEARTBEAT_LOG:AtomicU64=AtomicU64::new(0);
 
 // Không mở cửa sổ console cho chương trình con của Print Agent.
 #[cfg(windows)]
@@ -118,7 +120,14 @@ impl Api{
     "printerDisplayName":c.printer_display_name,"agentVersion":option_env!("FUJIFILM_BUILD_VERSION").unwrap_or("0.5.0"),
     "printerValid":valid,"paperStatus":paper,"windowsStatus":windows_status});
   match self.post("api/print-agent/status/heartbeat",body){
-   Ok(())=>log(&format!("HEARTBEAT_OK agent={} printer={} valid={}",self.id,name,valid)),
+   Ok(())=>{
+    // Heartbeat chi la tin hieu online, KHONG PHAI JOB. Ghi lan dau va moi 15 phut de log khong bi ngap.
+    let now=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+    let previous=LAST_HEARTBEAT_LOG.load(Ordering::Relaxed);
+    if now.saturating_sub(previous)>=900 && LAST_HEARTBEAT_LOG.compare_exchange(previous,now,Ordering::Relaxed,Ordering::Relaxed).is_ok(){
+     log(&format!("STATUS ONLINE (khong phai job) agent={} printer={} valid={}",self.id,name,valid));
+    }
+   },
    Err(e)=>log(&format!("HEARTBEAT_FAILED: {e}")),
   }
   let installed=Config::base_dir().join("SumatraPDF.exe").is_file();
