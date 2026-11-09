@@ -13,6 +13,17 @@ $reason = ''
 function UpdateLog([string]$message) {
  try { Add-Content -LiteralPath (Join-Path $Target 'rust-update.log') -Encoding UTF8 -Value ("{0} {1}" -f (Get-Date -Format s),$message) } catch {}
 }
+function UpdateProgress([int]$percent,[string]$stage,[string]$message) {
+ try {
+  $json=@{percent=$percent;stage=$stage;message=$message}|ConvertTo-Json -Compress
+  $encoding=New-Object System.Text.UTF8Encoding($false)
+  $tmp=Join-Path $Target 'rust-update-progress.json.tmp'
+  $dest=Join-Path $Target 'rust-update-progress.json'
+  [IO.File]::WriteAllText($tmp,$json,$encoding)
+  if(Test-Path -LiteralPath $dest){Remove-Item -LiteralPath $dest -Force}
+  Move-Item -LiteralPath $tmp -Destination $dest
+ } catch {}
+}
 try {
  foreach($file in $files) {
   if(-not (Test-Path -LiteralPath (Join-Path $Stage $file) -PathType Leaf)) {
@@ -29,6 +40,7 @@ try {
      }
    }
  }
+ UpdateProgress 91 'waiting-settings' 'Đang chờ đóng Print Settings để cài đặt an toàn...'
  # Do not terminate the Settings GUI or replace an EXE it may still be using.
  $closed = $false
  for($try=0;$try -lt 60;$try++) {
@@ -36,6 +48,7 @@ try {
    Start-Sleep -Seconds 2
  }
  if(-not $closed) {throw 'Print Settings still open; update deferred'}
+ UpdateProgress 94 'installing' 'Đang sao lưu và thay thế hai EXE...'
  # Stop only the tray process. Do not stop unrelated C# apps.
  if($TrayPid -gt 0) {Stop-Process -Id $TrayPid -ErrorAction SilentlyContinue; $trayStopped=$true}
  if($UpdaterPid -gt 0) {
@@ -62,6 +75,7 @@ try {
  }
  if(-not $applied){throw 'Unable to replace executables after retry'}
  $success=$true
+ UpdateProgress 99 'restarting' 'Đã cài đặt xong; đang khởi động lại Print Agent...'
  UpdateLog 'Automatic Rust update installed successfully, restarting Print Agent'
 } catch {
  $reason=$_.Exception.Message
@@ -71,6 +85,7 @@ try {
      try {Copy-Item -LiteralPath $old -Destination (Join-Path $Target $file) -Force -ErrorAction Stop} catch {}
    }
  }
+ UpdateProgress 0 'error' ("Cập nhật bị hoãn hoặc thất bại: $reason")
  UpdateLog ("Automatic update deferred/failed, rollback attempted: $reason")
 } finally {
  # Never alter config.ini, agent-id.txt, xlsx, job state or PDF files.
@@ -81,6 +96,7 @@ try {
    }
  }
  if($success) {
+   UpdateProgress 100 'completed' 'Cập nhật thành công, Print Agent đã được khởi động lại'
    try {Remove-Item -LiteralPath $Stage -Recurse -Force -ErrorAction SilentlyContinue} catch {}
  }
 }
