@@ -1,3 +1,17 @@
+# Fujifilm Print Rust — hai ứng dụng Windows
+
+**Bản hiện tại chỉ đóng gói hai file EXE:**
+- `Print-Agent.exe`: chạy System Tray, nhận lệnh qua chế độ `--core`, tự kiểm tra cập nhật qua chế độ `--update-check`; hỗ trợ `--test-pdf`.
+- `Print-Settings.exe`: cấu hình Windows printer, chế độ `pdfprint` hoặc `pdf`, đường dẫn mẫu Excel, SumatraPDF, tự cập nhật và khởi động cùng Windows.
+
+**Không còn cần:** `Print-Agent-Rust-Core.exe`, `Print-Updater-Rust.exe` hay `Print-Agent-Rust-Tray.exe`. Script Excel và cài update đã được nhúng trong Print-Agent.exe và có thể được tạo lúc cần. Các file cấu hình, template, PDF và log vẫn được tạo bên ngoài khi chạy.
+
+GitHub Actions: [Build Fujifilm Print Rust - 2 EXE](https://github.com/maedandori/fujifilm-print/actions). Chỉ tải artifact có build thành công `Fujifilm-Print-Rust-Two-EXE-Windows`.
+
+**Không dùng chung Agent ID với bản C# đang chạy; không cho hai Agent cùng nhận job trên máy công ty khi chưa kiểm thử.** Khi mở biểu tượng khay, Agent chưa tự nhận job; phải xác nhận thao tác bật. Chưa kiểm chứng Excel 2013, driver Fuji Xerox hoặc in giấy thực tế, và chưa kiểm thử cơ chế cập nhật qua hai phiên bản trên máy Windows thật.
+
+---
+
 # Fujifilm Print — Rust thử nghiệm
 
 Đây là bản thử nghiệm Rust **độc lập** để so sánh với `fujiserox-print` C#/.NET 8.
