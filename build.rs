@@ -54,15 +54,15 @@ fn ico_bitmap(n:usize,printer:bool)->Vec<u8>{
     }
     if printer {
         // Biểu tượng máy in: giấy trắng, thân máy xanh, khe giấy và đèn báo.
-        rect(&mut p,n,.22,.07,.78,.50,white);
-        rect(&mut p,n,.27,.15,.73,.19,gray);
-        rect(&mut p,n,.27,.25,.69,.29,gray);
-        rect(&mut p,n,.10,.32,.90,.77,dark);
-        rect(&mut p,n,.14,.37,.86,.73,blue);
-        rect(&mut p,n,.70,.43,.77,.50,[76,224,159,255]);
-        rect(&mut p,n,.22,.60,.78,.91,navy);
-        rect(&mut p,n,.27,.65,.73,.86,white);
-        rect(&mut p,n,.33,.72,.67,.76,gray);
+        rect(&mut p,n,0.22,0.07,0.78,0.50,white);
+        rect(&mut p,n,0.27,0.15,0.73,0.19,gray);
+        rect(&mut p,n,0.27,0.25,0.69,0.29,gray);
+        rect(&mut p,n,0.10,0.32,0.90,0.77,dark);
+        rect(&mut p,n,0.14,0.37,0.86,0.73,blue);
+        rect(&mut p,n,0.70,0.43,0.77,0.50,[76,224,159,255]);
+        rect(&mut p,n,0.22,0.60,0.78,0.91,navy);
+        rect(&mut p,n,0.27,0.65,0.73,0.86,white);
+        rect(&mut p,n,0.33,0.72,0.67,0.76,gray);
     }else{
         // Bánh răng 8 răng: răng, vành tròn và tâm trống rõ ở kích cỡ 16px.
         let center=(n as f32-1.)/2.;
@@ -71,9 +71,9 @@ fn ico_bitmap(n:usize,printer:bool)->Vec<u8>{
             let rr=(dx*dx+dy*dy).sqrt()/(n as f32);
             let angle=dy.atan2(dx);
             let eight=(angle*4.0).cos().abs();
-            let in_gear=rr<.33 || (rr<.44 && eight>.73);
-            if in_gear && rr>.135 {p[y*n+x]=if rr<.31{blue}else{navy};}
-            if rr<=.135 {p[y*n+x]=white;}
+            let in_gear=rr<0.33 || (rr<0.44 && eight>0.73);
+            if in_gear && rr>0.135 {p[y*n+x]=if rr<0.31{blue}else{navy};}
+            if rr<=0.135 {p[y*n+x]=white;}
         }}
     }
     let mut out=Vec::new();
