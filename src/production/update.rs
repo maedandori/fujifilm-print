@@ -50,7 +50,8 @@ pub mod app {
         let tag=meta["tag_name"].as_str().ok_or("Thiếu version GitHub Release")?;
         let latest=parse_version(tag).ok_or("Phiên bản release Rust không hợp lệ")?;
         let current=parse_version(option_env!("FUJIFILM_BUILD_VERSION").unwrap_or("0.0.0")).ok_or("Phiên bản hiện tại sai")?;
-        if latest<=current {log("Đã ở phiên bản mới nhất");return Ok(false)}
+        if latest<=current {log(&format!("Cap nhat: dang la ban moi nhat ({}); chi cap nhat khi phat hien ban cao hon",tag));return Ok(false)}
+        log(&format!("Tim thay phien ban moi {tag}; bat dau tai va xac minh SHA-256"));
         let assets=meta["assets"].as_array().ok_or("GitHub Release chưa có assets")?;
         let get_asset=|name:&str|->Result<String,String>{
             let asset=assets.iter().find(|a|a["name"]==name).ok_or(format!("Release thiếu {name}"))?;
@@ -98,8 +99,12 @@ pub mod app {
             }
             for file in FILES{if !folder.join(file).is_file(){return Err(format!("Thiếu file {file}"))}}
             let script=folder.join("install-rust-update.ps1");
-            fs::write(&script,include_str!("../../scripts/install-rust-update.ps1")).map_err(|e|format!("Không thể tạo installer: {e}"))?;
+            // Windows PowerShell 5.1: UTF-8 BOM de khong loi chuoi Unicode trong installer.
+            let mut psbytes=vec![0xEF,0xBB,0xBF];
+            psbytes.extend_from_slice(include_str!("../../scripts/install-rust-update.ps1").as_bytes());
+            fs::write(&script,psbytes).map_err(|e|format!("Không thể tạo installer: {e}"))?;
             // Tiến trình updater thoát trước khi PowerShell thay EXE.
+            log(&format!("Da download va xac minh SHA-256 ban {tag}; bat dau thay EXE khi Core da dung"));
             Command::new("powershell.exe").args(["-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-WindowStyle","Hidden","-File"])
                 .arg(script).arg("-Stage").arg(&folder).arg("-Target").arg(&dir)
                 .arg("-TrayPid").arg(tray_pid.to_string()).arg("-UpdaterPid").arg(std::process::id().to_string())
@@ -121,7 +126,8 @@ pub mod app {
             if watch && pid!=0&&!parent_running(pid){break}
             match check(pid){Ok(true)=>break,Ok(false)=>(),Err(e)=>log(&format!("Kiểm tra update lỗi: {e}"))}
             if !watch{break}
-            for _ in 0..360{thread::sleep(Duration::from_secs(60));if pid!=0&&!parent_running(pid){return}}
+            // Kiem tra moi 5 phut, khong can bam thu cong. Neu co ban moi thi cap nhat ngay khi ranh.
+            for _ in 0..30{thread::sleep(Duration::from_secs(10));if pid!=0&&!parent_running(pid){return}}
         }
     }
 }
