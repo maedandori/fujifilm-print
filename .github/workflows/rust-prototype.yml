@@ -4,6 +4,9 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+concurrency:
+  group: rust-test-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -51,6 +54,7 @@ jobs:
           Copy-Item target/release/fujifilm-print-rust.exe benchmark-output/Fujifilm-Print-Rust-CLI.exe
           Copy-Item target/release/print-agent-rust.exe benchmark-output/Print-Agent-Rust.exe
           Copy-Item target/release/print-settings-rust.exe benchmark-output/Print-Settings-Rust.exe
+          Copy-Item target/release/print-tray-rust.exe benchmark-output/Print-Agent-Rust-Tray.exe
           New-Item -ItemType Directory -Force -Path benchmark-output/scripts | Out-Null
           Copy-Item scripts/export-excel-pdf.ps1 benchmark-output/scripts/export-excel-pdf.ps1
           Copy-Item sample-job.json benchmark-output/sample-job.json
