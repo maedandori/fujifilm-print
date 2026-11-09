@@ -5,7 +5,7 @@ param(
  [Parameter(Mandatory=$true)][int]$UpdaterPid
 )
 $ErrorActionPreference='Stop'
-$names=@('Print-Agent-Rust.exe','Print-Agent-Rust-Core.exe','Print-Settings-Rust.exe','Print-Updater-Rust.exe','scripts/export-excel-pdf.ps1')
+$names=@('Print-Agent.exe','Print-Settings.exe')
 $backup=Join-Path $Stage 'backup'
 $success=$false
 try {
@@ -14,7 +14,8 @@ try {
     if(-not [System.IO.File]::Exists($src)){throw "Thiếu tệp cập nhật: $name"}
   }
   # Đã xác minh SHA trước khi khởi động script. Không thay thế nếu Core đang tồn tại.
-  if(Get-Process -Name 'Print-Agent-Rust-Core' -ErrorAction SilentlyContinue){throw 'Print Agent đang hoạt động: hoãn cập nhật'}
+  $pidFile=Join-Path $Target 'rust-core-active.pid'
+  if(Test-Path -LiteralPath $pidFile){$corePid=[int](Get-Content -LiteralPath $pidFile -Raw);if(Get-Process -Id $corePid -ErrorAction SilentlyContinue){throw 'Print Agent đang xử lý in: hoãn cập nhật'}}
   if($TrayPid -gt 0){Stop-Process -Id $TrayPid -ErrorAction SilentlyContinue}
   if($UpdaterPid -gt 0){
     try{Wait-Process -Id $UpdaterPid -Timeout 40 -ErrorAction SilentlyContinue}catch{}
@@ -49,7 +50,7 @@ try {
   if($success){
     try {Add-Content -LiteralPath (Join-Path $Target 'rust-update.log') -Value 'Đã cập nhật Rust thành công qua GitHub Release riêng.'}catch{}
   }
-  $agent=Join-Path $Target 'Print-Agent-Rust.exe'
+  $agent=Join-Path $Target 'Print-Agent.exe'
   if(Test-Path -LiteralPath $agent){Start-Process -FilePath $agent -WorkingDirectory $Target}
   try{Remove-Item -LiteralPath $Stage -Recurse -Force -ErrorAction SilentlyContinue}catch{}
 }
