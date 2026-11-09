@@ -32,7 +32,7 @@ fn tray_main() {
  nwg::MenuItem::builder().text("Kiểm tra cấu hình / 設定確認").parent(&menu).build(&mut diagnostic).unwrap();
  nwg::MenuItem::builder().text("Kiểm tra cập nhật Rust / 更新確認").parent(&menu).build(&mut update).unwrap();
  nwg::MenuItem::builder().text(&format!("Phiên bản Rust v{}",option_env!("FUJIFILM_BUILD_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))).parent(&menu).build(&mut version).unwrap();
- nwg::MenuItem::builder().text("Thoát giao diện / 終了").parent(&menu).build(&mut exit).unwrap();
+ nwg::MenuItem::builder().text("Kết thúc Print Agent / 終了").parent(&menu).build(&mut exit).unwrap();
  let base=std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
  let _instance_guard=match crate::single_instance(){Some(g)=>g,None=>{nwg::simple_message("Fujifilm Rust","Print Agent đã mở trên System Tray.");return}};
  let started_child=match check_local_config(&base){
@@ -113,11 +113,16 @@ fn tray_main() {
       .creation_flags(0x08000000).spawn(){nwg::error_message("Không kiểm tra được cập nhật",&e.to_string());}
    else{nwg::simple_message("Fujifilm Rust","Đã yêu cầu kiểm tra GitHub Release Rust; kết quả ghi trong rust-update.log.");}
   }else if h==handles.6 {
-   let mut guard=child.borrow_mut();
-   if let Some(c)=guard.as_mut(){if c.try_wait().ok().flatten().is_none(){
-    nwg::simple_message("Chưa thể thoát","Agent đang nhận job. Hãy chọn 'Dừng sau job hiện tại', kiểm tra trạng thái rồi thoát.");return
-   }}
-   nwg::stop_thread_dispatch();
+   // Core vẫn chạy để giữ STATUS ONLINE, không có nghĩa là đang in.
+   // Yêu cầu dừng an toàn; Core chỉ kiểm tra cờ giữa các job, không cắt ngang việc in.
+   // Không chờ process exit trên UI thread vì poll mạng có thể đang chờ phản hồi.
+   match std::fs::write(base.join("rust-stop-request.flag"),"stop"){
+    Ok(())=>{
+     production::log("Đã yêu cầu kết thúc Print Agent; Core sẽ dừng sau job hiện tại (nếu có).");
+     nwg::stop_thread_dispatch();
+    }
+    Err(e)=>nwg::error_message("Không thể kết thúc Agent",&format!("Không tạo được yêu cầu dừng: {e}")),
+   }
   }
  });
  nwg::dispatch_thread_events();
