@@ -17,16 +17,24 @@ fn main() {
  let mut log=nwg::MenuItem::default();
  let mut status=nwg::MenuItem::default();
  let mut exit=nwg::MenuItem::default();
+ let mut update=nwg::MenuItem::default();
  nwg::MenuItem::builder().text("Bắt đầu nhận lệnh (in thật) / 開始").parent(&menu).build(&mut start).unwrap();
  nwg::MenuItem::builder().text("Dừng sau job hiện tại / 停止").parent(&menu).build(&mut stop).unwrap();
  nwg::MenuItem::builder().text("Print Settings / 設定").parent(&menu).build(&mut settings).unwrap();
  nwg::MenuItem::builder().text("Xem nhật ký / ログ").parent(&menu).build(&mut log).unwrap();
  nwg::MenuItem::builder().text("Trạng thái / 状態").parent(&menu).build(&mut status).unwrap();
+ nwg::MenuItem::builder().text("Kiểm tra cập nhật Rust / 更新確認").parent(&menu).build(&mut update).unwrap();
  nwg::MenuItem::builder().text("Thoát giao diện / 終了").parent(&menu).build(&mut exit).unwrap();
  let base=std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
+ // Rust updater kiểm tra bản phát hành riêng mỗi 6 giờ khi được bật trong config.ini.
+ let updater=base.join("Print-Updater-Rust.exe");
+ if updater.is_file() && crate::enabled_updates(&base){
+   let _=Command::new(&updater).arg("--watch").arg("--tray-pid").arg(std::process::id().to_string())
+     .creation_flags(0x08000000).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
+ }
  let process:Rc<RefCell<Option<Child>>>=Rc::new(RefCell::new(None));
  let child=Rc::clone(&process);
- let handles=(tray.handle,start.handle,stop.handle,settings.handle,log.handle,status.handle,exit.handle);
+ let handles=(tray.handle,start.handle,stop.handle,settings.handle,log.handle,status.handle,exit.handle,update.handle);
  let menu=Rc::new(menu);let m=Rc::clone(&menu);let win=window.handle;
  let callback=nwg::full_bind_event_handler(&win,move|ev,_data,h|{
   if ev==(nwg::Event::OnContextMenu == ev || nwg::Event::OnMousePressRightUp == ev) && h==handles.0 {let (x,y)=nwg::GlobalCursor::position();m.popup(x,y);return}
@@ -56,6 +64,11 @@ fn main() {
    let running=guard.as_mut().and_then(|c|c.try_wait().ok().flatten()).is_some_and(|status|!status.success());
    let text=if guard.as_mut().and_then(|c|c.try_wait().ok()).flatten().is_none() && guard.is_some(){"Agent Rust có tiến trình đang chạy"}else if running{"Agent Rust đã dừng với lỗi"}else{"Agent Rust chưa chạy / đã thoát"};
    nwg::simple_message("Trạng thái Fujifilm Rust",text);
+  }else if h==handles.7 {
+   let exe=base.join("Print-Updater-Rust.exe");
+   if let Err(e)=Command::new(exe).arg("--tray-pid").arg(std::process::id().to_string())
+      .creation_flags(0x08000000).spawn(){nwg::error_message("Không kiểm tra được cập nhật",&e.to_string());}
+   else{nwg::simple_message("Fujifilm Rust","Đã yêu cầu kiểm tra GitHub Release Rust; kết quả ghi trong rust-update.log.");}
   }else if h==handles.6 {
    let mut guard=child.borrow_mut();
    if let Some(c)=guard.as_mut(){if c.try_wait().ok().flatten().is_none(){
@@ -69,3 +82,8 @@ fn main() {
 }
 #[cfg(not(windows))]
 fn main(){eprintln!("System Tray chỉ hỗ trợ Windows");}
+
+#[cfg(windows)]
+fn enabled_updates(base:&std::path::Path)->bool{
+  std::fs::read_to_string(base.join("config.ini")).ok().map(|v|!v.lines().any(|l|l.trim().eq_ignore_ascii_case("AutoUpdateEnabled=0"))).unwrap_or(false)
+}
