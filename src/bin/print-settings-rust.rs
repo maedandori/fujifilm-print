@@ -177,8 +177,10 @@ fn main() {
     nwg::Font::set_global_family("Segoe UI").unwrap();
 
     let app_version=option_env!("FUJIFILM_BUILD_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
+    let embedded=nwg::EmbedResource::load(None).expect("Không tải được icon Settings");
+    let gear_icon=embedded.icon(1,Some((32,32))).unwrap_or_else(||nwg::Icon::from_system(nwg::OemIcon::Information));
     let mut window=nwg::Window::default();
-    nwg::Window::builder().title(&format!("Fujifilm Print Settings Rust v{app_version} / 印刷設定"))
+    nwg::Window::builder().title(&format!("Fujifilm Print Settings Rust v{app_version} / 印刷設定")).icon(Some(&gear_icon))
         .size((870,745)).position((150,60)).build(&mut window).unwrap();
     let c=Config::load(&Config::base_dir().join("config.ini")).unwrap_or_default();
 
