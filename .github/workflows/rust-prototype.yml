@@ -42,6 +42,18 @@ jobs:
           [System.Management.Automation.Language.Parser]::ParseFile($installer,[ref]$t,[ref]$e) | Out-Null
           if($e.Count -ne 0){$e | ForEach-Object {Write-Error $_.ToString()}; throw 'Updater PowerShell parse error'}
           Write-Host 'Rust updater PowerShell parser OK'
+      - name: Kiểm tra kết nối tiến trình cập nhật với giao diện Settings
+        shell: pwsh
+        run: |
+          $updater=Get-Content src/production/update.rs -Raw
+          $settings=Get-Content src/bin/print-settings-rust.rs -Raw
+          $installer=Get-Content scripts/install-rust-update.ps1 -Raw
+          if($updater -notmatch 'rust-update-progress.json' -or
+             $settings -notmatch 'rust-update-progress.json' -or
+             $settings -notmatch 'OnTimerTick' -or
+             $installer -notmatch 'UpdateProgress'){
+            throw 'Thiếu kết nối tiến trình tự cập nhật giữa Agent và Settings'
+          }
       - name: Build Print Agent với icon máy in
         run: cargo build --release --bin print-tray-rust --features agent-icon
       - name: Build Print Settings với icon bánh răng
