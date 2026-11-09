@@ -222,7 +222,8 @@ pub fn run(live:bool)->Result<(),String>{
  let wake=super::socket::start(&c,id);
  log("Kết nối Machine-Control Rust --enable-live");
  let stop_file=Config::base_dir().join("rust-stop-request.flag");
- let _=fs::remove_file(&stop_file);
+ // Không xóa cờ dừng ở Core: nếu người dùng bấm Kết thúc ngay lúc khởi động,
+ // tray đã gửi cờ; xóa ở đây sẽ làm thất lạc yêu cầu.
  // Đăng ký máy in trước khi nhận job hoặc thực hiện kiểm tra phụ chậm.
  api.heartbeat(&c);
  api.snapshot(&c);
