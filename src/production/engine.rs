@@ -172,12 +172,15 @@ pub fn run(live:bool)->Result<(),String>{
  let api=Api::new(&c,id.clone())?;
  let wake=super::socket::start(&c,id);
  log("Kết nối Machine-Control Rust --enable-live");
+ let stop_file=Config::base_dir().join("rust-stop-request.flag");
+ let _=fs::remove_file(&stop_file);
  api.snapshot(&c);
  let mut last_heartbeat=Instant::now()-Duration::from_secs(61);
  let mut last_config=Instant::now()-Duration::from_secs(16);
  let mut last_pdf=Instant::now()-Duration::from_secs(16);
  let mut last_update=Instant::now()-Duration::from_secs(31);
  loop{
+  if stop_file.exists(){let _=fs::remove_file(&stop_file);log("Đã nhận lệnh thoát sau khi hoàn thành job");return Ok(())}
   if last_heartbeat.elapsed()>=Duration::from_secs(60){api.heartbeat(&c);last_heartbeat=Instant::now()}
   match api.poll(&c){Ok(true)=>continue,Ok(false)=>(),Err(e)=>log(&e)}
   if last_config.elapsed()>=Duration::from_secs(15){api.config_command(&mut c);last_config=Instant::now()}
