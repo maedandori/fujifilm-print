@@ -357,7 +357,31 @@ fn main() {
             let result=parse().and_then(|c|c.save(&Config::base_dir().join("config.ini")))
                 .and_then(|_|startup(b.check_state()==nwg::CheckBoxState::Checked));
             match result{
-                Ok(())=>{nwg::simple_message("Fujifilm Print","Đã lưu config.ini và cài đặt khởi động cùng Windows. Hãy khởi động lại Agent.");}
+                Ok(())=>{
+                    let base=Config::base_dir();
+                    let flag=base.join("rust-restart-request.flag");
+                    match std::fs::write(&flag,"restart") {
+                        Ok(())=>{
+                            // Nếu tray đang mở, mutex sẽ ngăn trùng; tray nhận cờ qua timer.
+                            // Nếu tray chưa mở, chạy tray để tự khởi động Core bằng config mới.
+                            let exe=base.join("Print-Agent.exe");
+                            use std::os::windows::process::CommandExt;
+                            use std::process::{Command,Stdio};
+                            match Command::new(&exe).arg("--ensure-tray").creation_flags(0x08000000)
+                                .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn() {
+                                Ok(_)=>{
+                                    production::log("Settings đã lưu; yêu cầu Print Agent tự restart sau job hiện tại.");
+                                    nwg::stop_thread_dispatch();
+                                },
+                                Err(e)=>{
+                                    production::log(&format!("Settings đã lưu nhưng không mở được Print Agent: {e}"));
+                                    nwg::error_message("Đã lưu nhưng chưa restart được Agent",&format!("Không chạy được {}: {e}",exe.display()));
+                                }
+                            }
+                        },
+                        Err(e)=>{nwg::error_message("Đã lưu nhưng chưa restart được Agent",&format!("Không tạo được yêu cầu restart: {e}"));}
+                    }
+                }
                 Err(e)=>{nwg::error_message("Không lưu được cấu hình",&e);}
             }
         }
