@@ -20,6 +20,7 @@ url = "2"
 sha2 = "0.10"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 tungstenite = { version = "0.24", features = ["native-tls"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 [target.'cfg(windows)'.dependencies]
 native-windows-gui = { version = "1.0", features = ["tray-notification", "message-window", "menu", "cursor", "embed-resource", "progress-bar", "timer"] }
