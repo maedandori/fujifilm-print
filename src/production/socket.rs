@@ -2,7 +2,7 @@ use super::{Config,log};
 use serde_json::Value;
 use std::{
  sync::{Arc,mpsc,atomic::{AtomicBool,Ordering}},
- thread,time::Duration,net::TcpStream,io::ErrorKind
+ thread,time::{Duration,Instant},net::TcpStream,io::ErrorKind
 };
 use tungstenite::{Message,stream::MaybeTlsStream,client::IntoClientRequest,http::HeaderValue};
 
@@ -30,6 +30,7 @@ pub fn start(c:&Config,agent_id:String)->Connection{
  let state=Arc::clone(&ready);
  let url=c.api_base_url.trim_end_matches('/').to_string();
  let token=c.agent_token.clone();
+ let c_clone=c.clone();
  thread::spawn(move||{
   let endpoint=if url.starts_with("https://"){url.replacen("https://","wss://",1)}
                else{url.replacen("http://","ws://",1)};
@@ -43,11 +44,29 @@ pub fn start(c:&Config,agent_id:String)->Connection{
     let (mut socket,_) = tungstenite::connect(request).map_err(|e|e.to_string())?;
     set_read_timeout(socket.get_mut());
     reconnect_delay=5;
+    let mut last_heartbeat=Instant::now()-Duration::from_secs(90);
+    let mut last_ack=Instant::now();
     log("WebSocket Rust đã kết nối; đang xác nhận giao thức");
     let _=sender.send(Event::Connected);
     loop{
      // Chỉ gửi lệnh qua WSS sau khi Worker xác nhận protocol v2.
      if state.load(Ordering::Relaxed){
+      if last_ack.elapsed()>Duration::from_secs(270){
+       return Err("Không nhận heartbeat-ack trong 270 giây".into());
+      }
+      if last_heartbeat.elapsed()>=Duration::from_secs(90){
+       let config=Config::load(&Config::base_dir().join("config.ini")).unwrap_or_else(|_|c_clone.clone());
+       let (name,valid,paper,windows_status)=super::status::printer_status(&config);
+       let machine=std::env::var("COMPUTERNAME").unwrap_or_else(|_|"Windows".into());
+       let body=serde_json::json!({"type":"heartbeat","payload":{
+        "agentId":agent_id,"machineName":machine,"printerName":name,
+        "printerDisplayName":config.printer_display_name,
+        "agentVersion":option_env!("FUJIFILM_BUILD_VERSION").unwrap_or("0.5.0"),
+        "printerValid":valid,"paperStatus":paper,"windowsStatus":windows_status
+       }});
+       socket.send(Message::Text(body.to_string().into())).map_err(|e|e.to_string())?;
+       last_heartbeat=Instant::now();
+      }
       while let Ok(message)=outgoing_rx.try_recv(){
        socket.send(Message::Text(message.to_string().into())).map_err(|e|e.to_string())?;
       }
@@ -67,6 +86,7 @@ pub fn start(c:&Config,agent_id:String)->Connection{
            "config-changed"=>{let _=sender.send(Event::ConfigChanged);},
            "pdf-tool-changed"=>{let _=sender.send(Event::PdfToolChanged);},
            "update-changed"=>{let _=sender.send(Event::UpdateChanged);},
+           "heartbeat-ack"=>{last_ack=Instant::now();},
            "heartbeat-error"=>log("WebSocket heartbeat bị Worker từ chối; kiểm tra cấu hình"),
            _=>{}
           }
