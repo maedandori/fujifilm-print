@@ -74,7 +74,17 @@ impl Job{
  pub fn part(&self,offset:usize,count:usize,copy:usize)->Self{let mut j=self.clone();j.job_id=format!("{}_part_{}_copy_{}",self.job_id,offset/count.max(1)+1,copy+1);j.copies=1;j.start_number+=offset;j.cards=self.cards.iter().skip(offset).take(count).cloned().collect();j}
 }
 pub fn agent_id()->Result<String,String>{let p=Config::base_dir().join("agent-id.txt");if p.exists(){let s=fs::read_to_string(&p).map_err(|e|e.to_string())?;let t=s.trim();if uuid::Uuid::parse_str(t).is_ok(){return Ok(t.into())}return Err("agent-id.txt không hợp lệ; không tự thay mã thiết bị".into())}let id=uuid::Uuid::new_v4().to_string();fs::write(&p,&id).map_err(|e|e.to_string())?;Ok(id)}
-pub fn log(message:&str){let p=Config::base_dir().join("print-agent-rust.log");let ts=format!("{:?}",std::time::SystemTime::now());let line=format!("{ts} {message}\n");use std::io::Write;if let Ok(mut f)=fs::OpenOptions::new().create(true).append(true).open(p){let _=f.write_all(line.as_bytes());}println!("{message}");}
+pub fn log(message:&str){
+ use chrono::{FixedOffset,Utc};
+ use std::io::Write;
+ // Ghi thời gian Nhật Bản (UTC+09:00) nhất quán, kể cả khi máy Windows đổi múi giờ.
+ let jst=FixedOffset::east_opt(9*3600).expect("JST offset hợp lệ");
+ let timestamp=Utc::now().with_timezone(&jst).format("%Y-%m-%d %H:%M:%S%.3f JST").to_string();
+ let line=format!("[{timestamp}] {message}\n");
+ let p=Config::base_dir().join("print-agent-rust.log");
+ if let Ok(mut f)=fs::OpenOptions::new().create(true).append(true).open(p){let _=f.write_all(line.as_bytes());}
+ println!("[{timestamp}] {message}");
+}
 #[cfg(test)]mod tests{
 use super::*;
 #[test]fn parse_source_sample(){let j=Job::parse(include_str!("../../sample-job.json")).unwrap();assert!(j.cards.len()>0);}
