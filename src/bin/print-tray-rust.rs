@@ -53,11 +53,63 @@ fn tray_main() {
    let _=Command::new(&updater).arg("--update-check").arg("--watch").arg("--tray-pid").arg(std::process::id().to_string())
      .creation_flags(0x08000000).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
  }
+ // Print Settings chỉ gửi yêu cầu; tray đợi Core hoàn thành job rồi mở lại.
+ let mut restart_timer=nwg::Timer::default();
+ nwg::Timer::builder().parent(&window).interval(1000).stopped(false).build(&mut restart_timer).unwrap();
+ let restart_timer_handle=restart_timer.handle;
+ let restart_pending=Rc::new(std::cell::Cell::new(false));
+ let pending=Rc::clone(&restart_pending);
  let process:Rc<RefCell<Option<Child>>>=Rc::new(RefCell::new(started_child));
  let child=Rc::clone(&process);
  let handles=(tray.handle,start.handle,stop.handle,settings.handle,log.handle,status.handle,exit.handle,update.handle,diagnostic.handle,version.handle);
  let menu=Rc::new(menu);let m=Rc::clone(&menu);let win=window.handle;
  let callback=nwg::full_bind_event_handler(&win,move|ev,_data,h|{
+  if ev==nwg::Event::OnTimerTick && h==restart_timer_handle {
+   let flag=base.join("rust-restart-request.flag");
+   if flag.exists() {pending.set(true);}
+   if pending.get(){
+    // Yêu cầu Core dừng chỉ khi tray còn quản lý tiến trình đó.
+    let mut guard=child.borrow_mut();
+    let still_running=match guard.as_mut(){
+     Some(proc)=>match proc.try_wait(){
+      Ok(None)=>true,
+      Ok(Some(_))=>false,
+      Err(e)=>{production::log(&format!("Không kiểm tra được Core khi restart: {e}"));true}
+     },
+     None=>false
+    };
+    if still_running {
+     if let Err(e)=std::fs::write(base.join("rust-stop-request.flag"),"stop"){
+      production::log(&format!("Không tạo được yêu cầu dừng để restart: {e}"));
+     }
+     return;
+    }
+    // Core đã kết thúc giữa các job; tránh để cờ dừng cũ chặn Core mới.
+    if let Err(e)=check_local_config(&base){
+     production::log(&format!("Không thể restart sau khi lưu Settings: {e}"));
+     let _=std::fs::remove_file(&flag);
+     pending.set(false);
+     return;
+    }
+    let _=std::fs::remove_file(base.join("rust-stop-request.flag"));
+    let exe=std::env::current_exe().unwrap();
+    match Command::new(exe).args(["--core","--enable-live"])
+      .creation_flags(0x08000000).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn(){
+     Ok(proc)=>{
+      *guard=Some(proc);
+      let _=std::fs::remove_file(flag);
+      pending.set(false);
+      production::log("Đã tự khởi động lại Print Agent sau khi lưu Settings");
+     },
+     Err(e)=>{
+      production::log(&format!("Không mở lại được Core sau khi lưu Settings: {e}"));
+      let _=std::fs::remove_file(flag);
+      pending.set(false);
+     }
+    }
+   }
+   return;
+  }
   if ev==nwg::Event::OnContextMenu && h==handles.0 {let (x,y)=nwg::GlobalCursor::position();m.popup(x,y);return}
   if ev!=nwg::Event::OnMenuItemSelected {return}
   if h==handles.1 {
