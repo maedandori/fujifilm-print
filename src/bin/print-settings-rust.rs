@@ -379,7 +379,7 @@ fn main() {
                                 }
                             }
                         },
-                        Err(e)=>nwg::error_message("Đã lưu nhưng chưa restart được Agent",&format!("Không tạo được yêu cầu restart: {e}"))
+                        Err(e)=>{nwg::error_message("Đã lưu nhưng chưa restart được Agent",&format!("Không tạo được yêu cầu restart: {e}"));}
                     }
                 }
                 Err(e)=>{nwg::error_message("Không lưu được cấu hình",&e);}
