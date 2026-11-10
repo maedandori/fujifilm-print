@@ -34,7 +34,9 @@ fn tray_main() {
  nwg::MenuItem::builder().text(&format!("Phiên bản Rust v{}",option_env!("FUJIFILM_BUILD_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))).parent(&menu).build(&mut version).unwrap();
  nwg::MenuItem::builder().text("Kết thúc Print Agent / 終了").parent(&menu).build(&mut exit).unwrap();
  let base=std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
- let _instance_guard=match crate::single_instance(){Some(g)=>g,None=>{nwg::simple_message("Fujifilm Rust","Print Agent đã mở trên System Tray.");return}};
+ let _instance_guard=match crate::single_instance(){Some(g)=>g,None=>{if !std::env::args().any(|a|a=="--ensure-tray"){nwg::simple_message("Fujifilm Rust","Print Agent đã mở trên System Tray.");}return}};
+ // Khi khởi động tray mới bằng Settings thì config đã có hiệu lực; không restart Core hai lần.
+ let _=std::fs::remove_file(base.join("rust-restart-request.flag"));
  let started_child=match check_local_config(&base){
     Err(e)=>{production::log(&format!("Không tự kết nối: {e}"));None},
     Ok(())=>{
