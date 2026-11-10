@@ -219,25 +219,85 @@ pub fn run(live:bool)->Result<(),String>{
  struct ActiveGuard(PathBuf);
  impl Drop for ActiveGuard {fn drop(&mut self){let _=fs::remove_file(&self.0);}}
  let _active_guard=ActiveGuard(active_path);
- let wake=super::socket::start(&c,id);
- log("Kết nối Machine-Control Rust --enable-live");
+ let connection=super::socket::start(&c,id);
+ log("Kết nối Machine-Control Rust --enable-live (WebSocket ưu tiên, HTTP dự phòng)");
  let stop_file=Config::base_dir().join("rust-stop-request.flag");
- // Không xóa cờ dừng ở Core: nếu người dùng bấm Kết thúc ngay lúc khởi động,
- // tray đã gửi cờ; xóa ở đây sẽ làm thất lạc yêu cầu.
- // Đăng ký máy in trước khi nhận job hoặc thực hiện kiểm tra phụ chậm.
- api.heartbeat(&c);
- api.snapshot(&c);
- let mut last_heartbeat=Instant::now();
- let mut last_config=Instant::now()-Duration::from_secs(16);
- let mut last_pdf=Instant::now()-Duration::from_secs(16);
- let mut last_update=Instant::now()-Duration::from_secs(31);
+ // Cơ chế dự phòng chỉ chạy khi chưa xác nhận giao thức WebSocket v2.
+ // Worker cũ không gửi protocol v2 nên Agent tự giữ cách làm cũ.
+ let mut last_http_heartbeat=Instant::now()-Duration::from_secs(45);
+ let mut last_http_poll=Instant::now()-Duration::from_secs(50);
+ let mut last_admin_check=Instant::now()-Duration::from_secs(290);
+ let mut last_job_safety=Instant::now();
+ let mut last_admin_safety=Instant::now();
+ let mut was_ready=false;
  loop{
-  if stop_file.exists(){let _=fs::remove_file(&stop_file);log("Đã nhận lệnh thoát sau khi hoàn thành job");return Ok(())}
-  if last_heartbeat.elapsed()>=Duration::from_secs(60){api.heartbeat(&c);last_heartbeat=Instant::now()}
-  match api.poll(&c){Ok(true)=>continue,Ok(false)=>(),Err(e)=>log(&e)}
-  if last_config.elapsed()>=Duration::from_secs(15){api.config_command(&mut c);last_config=Instant::now()}
-  if last_pdf.elapsed()>=Duration::from_secs(15){api.sumatra_command();last_pdf=Instant::now()}
-  if last_update.elapsed()>=Duration::from_secs(30){api.update_command();last_update=Instant::now()}
-  let _=wake.recv_timeout(Duration::from_secs(c.poll_seconds));
+  if stop_file.exists(){
+   let _=fs::remove_file(&stop_file);
+   log("Đã nhận lệnh thoát sau khi hoàn thành job");
+   return Ok(())
+  }
+  let ready=connection.ready.load(Ordering::Relaxed);
+  if ready!=was_ready{
+   if ready{
+    log("Đã chuyển sang chế độ WebSocket: chỉ gọi HTTP khi có lệnh hoặc đồng bộ dự phòng");
+    // Đồng bộ một lần sau reconnect để nhận job/cấu hình đã tạo khi Agent offline.
+    api.snapshot(&c);
+    api.config_command(&mut c);
+    api.sumatra_command();
+    api.update_command();
+    while matches!(api.poll(&c),Ok(true)){}
+    last_job_safety=Instant::now();
+    last_admin_safety=Instant::now();
+   }else{
+    log("Chưa có WebSocket v2; bật HTTP polling dự phòng");
+    last_http_poll=Instant::now()-Duration::from_secs(60);
+    last_http_heartbeat=Instant::now()-Duration::from_secs(60);
+   }
+   was_ready=ready;
+  }
+  if ready{
+   // Safety net: một lần mỗi 10 phút để tránh kẹt job nếu thông báo push bị mất.
+   if last_job_safety.elapsed()>=Duration::from_secs(600){
+    while matches!(api.poll(&c),Ok(true)){}
+    last_job_safety=Instant::now();
+   }
+   // Lệnh quản trị đã push qua WSS; truy vấn kiểm tra mỗi giờ phòng trường hợp mất sự kiện.
+   if last_admin_safety.elapsed()>=Duration::from_secs(3600){
+    api.config_command(&mut c);
+    api.sumatra_command();
+    api.update_command();
+    last_admin_safety=Instant::now();
+   }
+  }else{
+   if last_http_heartbeat.elapsed()>=Duration::from_secs(60){
+    api.heartbeat(&c);
+    last_http_heartbeat=Instant::now();
+   }
+   if last_http_poll.elapsed()>=Duration::from_secs(60){
+    match api.poll(&c){Ok(_)=>(),Err(e)=>log(&e)}
+    last_http_poll=Instant::now();
+   }
+   if last_admin_check.elapsed()>=Duration::from_secs(300){
+    api.config_command(&mut c);
+    api.sumatra_command();
+    api.update_command();
+    last_admin_check=Instant::now();
+   }
+  }
+  match connection.events.recv_timeout(Duration::from_secs(1)){
+   Ok(super::socket::Event::Ready)=>{},
+   Ok(super::socket::Event::Connected)=>{},
+   Ok(super::socket::Event::Disconnected)=>{},
+   Ok(super::socket::Event::JobAvailable)=>{
+    // Đọc hàng đợi D1 qua HTTP theo sự kiện; mỗi job được claim một lần.
+    while matches!(api.poll(&c),Ok(true)){}
+    last_job_safety=Instant::now();
+   },
+   Ok(super::socket::Event::ConfigChanged)=>{api.config_command(&mut c);},
+   Ok(super::socket::Event::PdfToolChanged)=>{api.sumatra_command();},
+   Ok(super::socket::Event::UpdateChanged)=>{api.update_command();},
+   Err(std::sync::mpsc::RecvTimeoutError::Timeout)=>{},
+   Err(std::sync::mpsc::RecvTimeoutError::Disconnected)=>{return Err("Luồng WebSocket đã dừng".into())}
+  }
  }
 }
