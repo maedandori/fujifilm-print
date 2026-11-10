@@ -367,7 +367,7 @@ fn main() {
                             let exe=base.join("Print-Agent.exe");
                             use std::os::windows::process::CommandExt;
                             use std::process::{Command,Stdio};
-                            match Command::new(&exe).creation_flags(0x08000000)
+                            match Command::new(&exe).arg("--ensure-tray").creation_flags(0x08000000)
                                 .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn() {
                                 Ok(_)=>{
                                     production::log("Settings đã lưu; yêu cầu Print Agent tự restart sau job hiện tại.");
