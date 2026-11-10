@@ -117,7 +117,7 @@ impl Api{
   let machine=std::env::var("COMPUTERNAME").unwrap_or_else(|_|"Windows".into());
   
   let body=json!({"agentId":self.id,"machineName":machine,"printerName":name,
-    "printerDisplayName":c.printer_display_name,"agentVersion":option_env!("FUJIFILM_BUILD_VERSION").unwrap_or("0.5.0"),
+    "printerDisplayName":c.printer_display_name,"agentPlatform":"rust","agentVersion":option_env!("FUJIFILM_BUILD_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")),
     "printerValid":valid,"paperStatus":paper,"windowsStatus":windows_status});
   match self.post("api/print-agent/status/heartbeat",body){
    Ok(())=>{
