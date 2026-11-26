@@ -31,7 +31,7 @@ fn tray_main() {
  nwg::MenuItem::builder().text("Trạng thái / 状態").parent(&menu).build(&mut status).unwrap();
  nwg::MenuItem::builder().text("Kiểm tra cấu hình / 設定確認").parent(&menu).build(&mut diagnostic).unwrap();
  nwg::MenuItem::builder().text("Kiểm tra cập nhật Rust / 更新確認").parent(&menu).build(&mut update).unwrap();
- nwg::MenuItem::builder().text(&format!("Phiên bản Rust v{}",option_env!("FUJIFILM_BUILD_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))).parent(&menu).build(&mut version).unwrap();
+ nwg::MenuItem::builder().text(&format!("Phiên bản Rust fp{}",option_env!("FUJIFILM_BUILD_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))).parent(&menu).build(&mut version).unwrap();
  nwg::MenuItem::builder().text("Kết thúc Print Agent / 終了").parent(&menu).build(&mut exit).unwrap();
  let base=std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
  let _instance_guard=match crate::single_instance(){Some(g)=>g,None=>{nwg::simple_message("Fujifilm Rust","Print Agent đã mở trên System Tray.");return}};

@@ -21,8 +21,9 @@ pub mod app {
         }
     }
     fn parse_version(s:&str)->Option<Vec<u64>>{
-        let v=s.strip_prefix("rust-v").unwrap_or(s);
-        v.split('.').map(|s|s.parse::<u64>().ok()).collect::<Option<Vec<_>>>()
+        let v=s.strip_prefix("fp").or_else(||s.strip_prefix("rust-v")).unwrap_or(s);
+        let parts=v.split('.').map(|s|s.parse::<u64>().ok()).collect::<Option<Vec<_>>>()?;
+        (parts.len()==3).then_some(parts)
     }
     fn executable_dir()->Result<PathBuf,String>{Ok(std::env::current_exe().map_err(|e|e.to_string())?.parent().ok_or("Thiếu thư mục EXE")?.to_path_buf())}
     fn fetch(url:&str,max:usize,show_download:bool)->Result<Vec<u8>,String>{
