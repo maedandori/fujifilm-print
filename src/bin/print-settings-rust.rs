@@ -194,7 +194,7 @@ fn main() {
     let embedded=nwg::EmbedResource::load(None).expect("Không tải được icon Settings");
     let gear_icon=embedded.icon(1,Some((32,32))).unwrap_or_else(||nwg::Icon::from_system(nwg::OemIcon::Information));
     let mut window=nwg::Window::default();
-    nwg::Window::builder().title(&format!("Fujifilm Print Settings Rust v{app_version} / 印刷設定")).icon(Some(&gear_icon))
+    nwg::Window::builder().title(&format!("Fujifilm Print Settings Rust fp{app_version} / 印刷設定")).icon(Some(&gear_icon))
         .size((870,785)).position((150,60)).build(&mut window).unwrap();
     let c=Config::load(&Config::base_dir().join("config.ini")).unwrap_or_default();
 
@@ -255,7 +255,7 @@ fn main() {
         .build(&mut boot).unwrap();
 
     let mut note=nwg::Label::default();
-    nwg::Label::builder().text(&format!("Phiên bản Settings: v{app_version} | Lưu config.ini | Excel 2013 cần thiết để xuất PDF."))
+    nwg::Label::builder().text(&format!("Phiên bản Settings: fp{app_version} | Lưu config.ini | Excel 2013 cần thiết để xuất PDF."))
         .parent(&window).position((20,563)).size((820,28)).build(&mut note).unwrap();
 
     // Settings hiển thị thông tin updater thực tế, không mô phỏng phần trăm chạy.

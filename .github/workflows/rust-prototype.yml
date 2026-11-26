@@ -92,4 +92,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag="rust-v${{ env.FUJIFILM_BUILD_VERSION }}"
-          gh release create $tag fujifilm-rust-update.zip fujifilm-rust-update.sha256 --title "Fujifilm Rust ${{ env.FUJIFILM_BUILD_VERSION }} - Two EXE" --notes "Chỉ Print-Agent.exe và Print-Settings.exe. Giữ nguyên config.ini, agent-id.txt và template." --latest --target "${{ github.sha }}"
+          gh release create $tag fujifilm-rust-update.zip fujifilm-rust-update.sha256 --title "Fujifilm Print fp${{ env.FUJIFILM_BUILD_VERSION }} - Two EXE" --notes "Chỉ Print-Agent.exe và Print-Settings.exe. Giữ nguyên config.ini, agent-id.txt và template." --latest --target "${{ github.sha }}"
