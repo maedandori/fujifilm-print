@@ -74,6 +74,7 @@ jobs:
           $files | ForEach-Object { Write-Host ("{0} - {1} bytes" -f $_.Name,$_.Length) }
       - name: Xuất 2 EXE để tải thủ công
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: Fujifilm-Print-Rust-Two-EXE-Windows
           path: publish/
